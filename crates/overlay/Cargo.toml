@@ -4,4 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+iced.workspace = true
+iced_layershell.workspace = true
 shared.workspace = true

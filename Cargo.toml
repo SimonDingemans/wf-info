@@ -15,3 +15,10 @@ edition = "2024"
 shared = { path = "crates/shared" }
 application = { path = "crates/application" }
 overlay = { path = "crates/overlay" }
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "screencast"] }
+iced = { version = "0.13", features = ["tokio"] }
+iced_layershell = "0.13"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "unstable"] }

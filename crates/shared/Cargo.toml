@@ -4,3 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+ashpd.workspace = true
+serde.workspace = true
+toml.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true
