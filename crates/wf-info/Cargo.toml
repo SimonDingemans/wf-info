@@ -1,0 +1,9 @@
+[package]
+name = "wf-info"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+application.workspace = true
+overlay.workspace = true
+shared.workspace = true

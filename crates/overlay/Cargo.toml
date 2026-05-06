@@ -1,0 +1,7 @@
+[package]
+name = "overlay"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+shared.workspace = true

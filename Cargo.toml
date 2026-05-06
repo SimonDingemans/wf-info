@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "crates/application",
+    "crates/overlay",
+    "crates/shared",
+    "crates/wf-info",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+shared = { path = "crates/shared" }
+application = { path = "crates/application" }
+overlay = { path = "crates/overlay" }
