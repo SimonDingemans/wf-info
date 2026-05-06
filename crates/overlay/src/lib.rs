@@ -1,5 +1,3 @@
-use shared::AppContext;
+pub mod debug;
 
-pub fn run(context: &AppContext) {
-    println!("Starting {} overlay", context.name());
-}
+pub use debug::{DebugOverlay, run};

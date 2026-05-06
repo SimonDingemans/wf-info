@@ -1,8 +1,5 @@
-use shared::AppContext;
+mod cli;
 
 fn main() {
-    let context = AppContext::new("wf-info");
-
-    application::run(&context);
-    overlay::run(&context);
+    cli::run();
 }

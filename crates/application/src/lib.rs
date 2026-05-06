@@ -1,5 +1,3 @@
-use shared::AppContext;
+pub mod app;
 
-pub fn run(context: &AppContext) {
-    println!("Starting {} application", context.name());
-}
+pub use app::run;
