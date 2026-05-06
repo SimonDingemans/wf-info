@@ -6,4 +6,5 @@ edition.workspace = true
 [dependencies]
 iced.workspace = true
 iced_layershell.workspace = true
+log.workspace = true
 shared.workspace = true

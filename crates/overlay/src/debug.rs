@@ -64,13 +64,8 @@ enum Message {
     Tick,
 }
 
-impl Application for DebugOverlayApp {
-    type Executor = iced::executor::Default;
-    type Flags = DebugOverlay;
-    type Message = Message;
-    type Theme = Theme;
-
-    fn new(overlay: Self::Flags) -> (Self, Command<Self::Message>) {
+impl DebugOverlayApp {
+    fn new(overlay: DebugOverlay) -> (Self, Command<Message>) {
         (Self { overlay }, Command::none())
     }
 
@@ -78,34 +73,73 @@ impl Application for DebugOverlayApp {
         "wf-info debug overlay".to_owned()
     }
 
-    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+    fn update(&mut self, message: Message) -> Command<Message> {
+        log::debug!("iced layershell overlay update event: {message:?}");
+
         match message {
             Message::Close => {
-                std::process::exit(0);
+                Self::exit();
             }
             Message::Tick => {
-                std::process::exit(0);
+                Self::exit();
             }
             _ => Command::none(),
         }
     }
 
-    fn subscription(&self) -> Subscription<Self::Message> {
+    fn subscription(&self) -> Subscription<Message> {
         time::every(std::time::Duration::from_secs(12)).map(|_| Message::Tick)
     }
 
-    fn view(&self) -> Element<'_, Self::Message, Self::Theme, Renderer> {
+    fn view(&self) -> Element<'_, Message, Theme, Renderer> {
         match &self.overlay {
             DebugOverlay::MonitorInfo { lines, .. } => monitor_info_view(lines),
             DebugOverlay::Test { .. } => test_overlay_view(),
         }
     }
 
-    fn style(&self, _theme: &Self::Theme) -> iced_layershell::Appearance {
+    fn style(&self, _theme: &Theme) -> iced_layershell::Appearance {
         iced_layershell::Appearance {
             background_color: Color::TRANSPARENT,
             text_color: Color::WHITE,
         }
+    }
+}
+
+impl DebugOverlayApp {
+    fn exit() -> ! {
+        std::process::exit(0);
+    }
+}
+
+impl Application for DebugOverlayApp {
+    type Executor = iced::executor::Default;
+    type Flags = DebugOverlay;
+    type Message = Message;
+    type Theme = Theme;
+
+    fn new(overlay: Self::Flags) -> (Self, Command<Self::Message>) {
+        DebugOverlayApp::new(overlay)
+    }
+
+    fn namespace(&self) -> String {
+        DebugOverlayApp::namespace(self)
+    }
+
+    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        DebugOverlayApp::update(self, message)
+    }
+
+    fn subscription(&self) -> Subscription<Self::Message> {
+        DebugOverlayApp::subscription(self)
+    }
+
+    fn view(&self) -> Element<'_, Self::Message, Self::Theme, Renderer> {
+        DebugOverlayApp::view(self)
+    }
+
+    fn style(&self, _theme: &Self::Theme) -> iced_layershell::Appearance {
+        DebugOverlayApp::style(self, _theme)
     }
 }
 

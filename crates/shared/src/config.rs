@@ -26,6 +26,15 @@ impl Config {
         Self::read(Self::path_for_app(app_name))
     }
 
+    pub fn with_cli_overrides(mut self, overrides: &CliConfigOverrides) -> Self {
+        self.apply_cli_overrides(overrides);
+        self
+    }
+
+    pub fn apply_cli_overrides(&mut self, overrides: &CliConfigOverrides) {
+        self.logging.apply_cli_overrides(&overrides.logging);
+    }
+
     pub fn from_settings(settings: &Settings) -> Self {
         Self::from(settings)
     }
@@ -88,6 +97,10 @@ pub struct Settings {
 }
 
 impl Settings {
+    pub fn apply_cli_overrides(&mut self, overrides: &CliConfigOverrides) {
+        self.logging.apply_cli_overrides(&overrides.logging);
+    }
+
     pub fn to_config(&self) -> Config {
         Config::from(self)
     }
@@ -102,6 +115,44 @@ impl Settings {
 
     pub fn set_capture_portal_restore_token(&mut self, restore_token: impl Into<String>) {
         self.capture.set_portal_restore_token(restore_token);
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CliConfigOverrides {
+    logging: CliLoggingOverrides,
+}
+
+impl CliConfigOverrides {
+    pub fn set_logging_level(&mut self, level: impl Into<String>) {
+        self.logging.set_level(level);
+    }
+
+    pub fn logging_level(&self) -> Option<&str> {
+        self.logging.level()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.logging.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct CliLoggingOverrides {
+    level: Option<String>,
+}
+
+impl CliLoggingOverrides {
+    fn set_level(&mut self, level: impl Into<String>) {
+        self.level = Some(level.into());
+    }
+
+    fn level(&self) -> Option<&str> {
+        self.level.as_deref()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.level.is_none()
     }
 }
 
@@ -480,6 +531,30 @@ impl From<&LoggingSettings> for LoggingConfig {
     }
 }
 
+impl LoggingConfig {
+    fn apply_cli_overrides(&mut self, overrides: &CliLoggingOverrides) {
+        if let Some(level) = overrides.level() {
+            self.set_level(level);
+        }
+    }
+
+    fn set_level(&mut self, level: impl Into<String>) {
+        self.level = level.into();
+    }
+}
+
+impl LoggingSettings {
+    fn apply_cli_overrides(&mut self, overrides: &CliLoggingOverrides) {
+        if let Some(level) = overrides.level() {
+            self.set_level(level);
+        }
+    }
+
+    fn set_level(&mut self, level: impl Into<String>) {
+        self.level = level.into();
+    }
+}
+
 fn config_path(app_name: &str) -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
@@ -539,7 +614,7 @@ fn default_log_level() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, Settings};
+    use super::{CliConfigOverrides, Config, Settings};
 
     #[test]
     fn partial_config_sections_use_defaults() {
@@ -604,5 +679,33 @@ monitor = "DP-1"
             settings.to_config().capture.portal_restore_token.as_deref(),
             Some("restored-session")
         );
+    }
+
+    #[test]
+    fn cli_overrides_replace_loaded_logging_level_without_changing_other_config() {
+        let config = toml::from_str::<Config>(
+            r#"
+[app]
+locale = "nl"
+
+[logging]
+level = "warn"
+file = "/tmp/wf-info.log"
+"#,
+        )
+        .expect("config should deserialize");
+        let mut overrides = CliConfigOverrides::default();
+        overrides.set_logging_level("debug");
+
+        let config = config.with_cli_overrides(&overrides);
+        let mut settings = Settings::from(config.clone());
+        settings.apply_cli_overrides(&overrides);
+
+        assert_eq!(overrides.logging_level(), Some("debug"));
+        assert_eq!(config.app.locale, "nl");
+        assert_eq!(config.logging.level, "debug");
+        assert_eq!(config.logging.file, "/tmp/wf-info.log");
+        assert_eq!(settings.logging.level, "debug");
+        assert_eq!(settings.logging.file, "/tmp/wf-info.log");
     }
 }

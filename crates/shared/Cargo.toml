@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 ashpd.workspace = true
+env_logger.workspace = true
+log.workspace = true
 serde.workspace = true
 toml.workspace = true
 wayland-client.workspace = true
