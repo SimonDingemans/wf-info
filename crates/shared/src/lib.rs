@@ -1,13 +1,4 @@
-pub struct AppContext {
-    name: &'static str,
-}
+pub mod config;
+pub mod context;
 
-impl AppContext {
-    pub const fn new(name: &'static str) -> Self {
-        Self { name }
-    }
-
-    pub const fn name(&self) -> &'static str {
-        self.name
-    }
-}
+pub use context::AppContext;
