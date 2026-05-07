@@ -1,4 +1,5 @@
 pub mod error;
+pub mod implementations;
 pub mod pipeline;
 pub mod tesseract;
 
