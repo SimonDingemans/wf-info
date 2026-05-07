@@ -17,12 +17,16 @@ The workspace is split into focused crates:
 - `crates/wf-info`: binary entry point and startup wiring.
 - `crates/shared`: shared domain, config, paths, logging, events, errors, and
   reusable infrastructure types. Keep this crate free of UI-framework code.
+- `crates/ocr`: reusable capture/OCR pipeline types, Tesseract integration,
+  and feature-specific OCR implementations such as reward-screen scanning.
 - `crates/application`: main `iced` application UI.
 - `crates/overlay`: reward overlay using `iced_layershell`.
 
 Respect these boundaries. UI crates should not own OCR, Warframe log parsing,
-market data loading, or long-running service logic. The overlay should receive
-processed reward scan data; it should not fetch market data or run OCR.
+market data loading, or long-running service logic. The OCR crate should keep
+general pipeline code separate from feature-specific implementations and should
+not own market data enrichment or UI state. The overlay should receive processed
+reward scan data; it should not fetch market data or run OCR.
 
 ## Product Direction
 

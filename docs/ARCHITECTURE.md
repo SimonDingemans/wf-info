@@ -16,7 +16,7 @@ This rewrite targets Linux desktops with Wayland as the primary session. The app
 
 ### Module Responsibility Constraints
 
-- lib.rs, main.rs, and mod.rs files are strictly reserved for module declarations and structural exports.
+- lib.rs, main.rs, and mod.rs files are strictly reserved for module declarations, structural exports and integration tests.
 - These files must not contain business logic, implementation details, or complex data structures.
 - Business logic, service definitions, and domain models must be implemented in dedicated files within the module hierarchy.
 
@@ -42,11 +42,26 @@ Suggested modules:
 - `config`: TOML-backed user configuration.
 - `logging`: `env_logger` initialization and log file writer.
 - `events`: app-wide messages exchanged between UI, overlay, log watcher, OCR, and data services.
-- `domain`: reward, relic, equipment, market, OCR, and overlay models.
+- `domain`: reward, relic, equipment, market, and overlay models.
 - `paths`: XDG config/data/cache/log path resolution.
 - `errors`: common error/result types.
 
 Keep `shared` free of UI framework code so application, overlay, OCR, data, and tests can reuse it.
+
+### `crates/ocr`
+
+Reusable OCR pipeline and feature scanners.
+
+Responsibilities:
+
+- Define capture frame, scan region, OCR image, OCR options, and text candidate types.
+- Define reusable OCR pipeline traits for capture, region detection, preprocessing, recognition, and feature scanning.
+- Keep Tesseract behind a `TextRecognizer` implementation.
+- Keep general OCR pipeline and recognizer code separate from feature-specific scanners.
+- Keep feature-specific scanners under an `implementations` module, with one subdirectory per implementation, starting with end-of-mission reward-screen scanning.
+- Detect, preprocess, and OCR end-of-mission reward-name regions from supported 16:9 Warframe screenshots.
+- Provide reward-screen OCR fixture coverage using crate-local assets.
+- Keep market matching, price enrichment, user ownership data, and UI state outside this crate.
 
 ### `crates/application`
 
@@ -232,7 +247,7 @@ Design notes:
 
 ## OCR Architecture
 
-OCR must be adaptable because multiple features scan the screen and feed images into Tesseract. Avoid a single reward-screen-only OCR function.
+OCR lives in `crates/ocr` and must be adaptable because multiple features scan the screen and feed images into Tesseract. Avoid a single reward-screen-only OCR function. Keep the general pipeline at the crate root and feature-specific scanners under `implementations`.
 
 Use a pipeline with clear stages:
 
@@ -275,7 +290,7 @@ pub trait FeatureScanner {
 
 Feature scanners can then compose the same capture/OCR building blocks:
 
-- `RewardScreenScanner`: detects reward cards, OCRs reward names, matches items, enriches with market data.
+- `implementations::reward_screen::RewardScreenScanner`: detects reward cards and OCRs reward names into text candidates.
 - `SnapItScanner`: OCRs a user-selected region.
 - `MasterItScanner`: detects mastered equipment from a profile screenshot.
 - `SearchIt` probably does not need screen OCR, but can reuse item matching and market lookup.
@@ -283,7 +298,7 @@ Feature scanners can then compose the same capture/OCR building blocks:
 Tesseract integration:
 
 - Keep Tesseract behind `TextRecognizer`.
-- Do not expose raw Tesseract API types outside the OCR module.
+- Do not expose raw Tesseract API types outside the OCR crate.
 - Support per-feature OCR options:
   - language
   - whitelist/character set
