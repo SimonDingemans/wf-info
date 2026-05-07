@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/application",
+    "crates/ocr",
     "crates/overlay",
     "crates/shared",
     "crates/wf-info",
@@ -14,13 +15,17 @@ edition = "2024"
 [workspace.dependencies]
 shared = { path = "crates/shared" }
 application = { path = "crates/application" }
+ocr = { path = "crates/ocr" }
 overlay = { path = "crates/overlay" }
 ashpd = { version = "0.13", default-features = false, features = ["async-io", "screencast"] }
 env_logger = "0.11"
 iced = { version = "0.13", features = ["tokio"] }
 iced_layershell = "0.13"
+image = "0.25"
+kreuzberg-tesseract = "4.9"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
+thiserror = "2"
 toml = "0.9"
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
