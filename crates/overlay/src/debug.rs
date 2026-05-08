@@ -1,11 +1,11 @@
-use iced::widget::{button, column, container, horizontal_rule, text};
+use iced::widget::{button, column, container, horizontal_rule, row, text};
 use iced::{
     Color, Element, Font, Length, Pixels, Renderer, Subscription, Task as Command, Theme, time,
 };
 use iced_layershell::reexport::{Anchor, KeyboardInteractivity, Layer};
 use iced_layershell::settings::{LayerShellSettings, Settings, StartMode};
 use iced_layershell::{Application, to_layer_message};
-use shared::AppContext;
+use shared::{AppContext, rewards::RewardOverlayEntry};
 
 pub enum DebugOverlay {
     MonitorInfo {
@@ -15,14 +15,18 @@ pub enum DebugOverlay {
     Test {
         output_name: Option<String>,
     },
+    Rewards {
+        output_name: Option<String>,
+        rewards: Vec<RewardOverlayEntry>,
+    },
 }
 
 impl DebugOverlay {
     fn output_name(&self) -> Option<&str> {
         match self {
-            Self::MonitorInfo { output_name, .. } | Self::Test { output_name } => {
-                output_name.as_deref()
-            }
+            Self::MonitorInfo { output_name, .. }
+            | Self::Test { output_name }
+            | Self::Rewards { output_name, .. } => output_name.as_deref(),
         }
     }
 }
@@ -95,6 +99,7 @@ impl DebugOverlayApp {
         match &self.overlay {
             DebugOverlay::MonitorInfo { lines, .. } => monitor_info_view(lines),
             DebugOverlay::Test { .. } => test_overlay_view(),
+            DebugOverlay::Rewards { rewards, .. } => reward_overlay_view(rewards),
         }
     }
 
@@ -213,4 +218,65 @@ fn test_overlay_view() -> Element<'static, Message, Theme, Renderer> {
         ..Default::default()
     })
     .into()
+}
+
+fn reward_overlay_view(rewards: &[RewardOverlayEntry]) -> Element<'_, Message, Theme, Renderer> {
+    let reward_cards = rewards.iter().fold(row![].spacing(10), |row, reward| {
+        row.push(reward_card(reward))
+    });
+
+    container(reward_cards)
+        .padding(18)
+        .width(Length::Shrink)
+        .height(Length::Shrink)
+        .style(|_theme| container::Style {
+            background: Some(Color::from_rgba(0.03, 0.04, 0.05, 0.78).into()),
+            border: iced::Border {
+                color: Color::from_rgb(0.88, 0.72, 0.32),
+                width: 2.0,
+                radius: 4.0.into(),
+            },
+            text_color: Some(Color::WHITE),
+            ..Default::default()
+        })
+        .into()
+}
+
+fn reward_card(reward: &RewardOverlayEntry) -> Element<'_, Message, Theme, Renderer> {
+    let mut details = column![text(&reward.name).size(16)].spacing(4);
+
+    if let Some(platinum) = reward.platinum {
+        details = details.push(text(format!("{platinum} platinum")).size(14));
+    }
+
+    if let Some(ducats) = reward.ducats {
+        details = details.push(text(format!("{ducats} ducats")).size(14));
+    }
+
+    if let Some(volume) = reward.volume {
+        details = details.push(text(format!("{volume} sold recently")).size(13));
+    }
+
+    if reward.vaulted {
+        details = details.push(text("Vaulted").size(13));
+    }
+
+    if let (Some(owned), Some(required)) = (reward.owned_count, reward.required_count) {
+        details = details.push(text(format!("Owned {owned}/{required}")).size(13));
+    }
+
+    container(details)
+        .padding(12)
+        .width(Length::Fixed(180.0))
+        .style(|_theme| container::Style {
+            background: Some(Color::from_rgba(0.08, 0.09, 0.11, 0.92).into()),
+            border: iced::Border {
+                color: Color::from_rgb(0.30, 0.34, 0.38),
+                width: 1.0,
+                radius: 4.0.into(),
+            },
+            text_color: Some(Color::WHITE),
+            ..Default::default()
+        })
+        .into()
 }

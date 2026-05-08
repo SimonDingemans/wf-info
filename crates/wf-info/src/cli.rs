@@ -1,4 +1,4 @@
-use shared::{AppContext, config::CliConfigOverrides};
+use shared::{AppContext, config::CliConfigOverrides, rewards::RewardOverlayEntry};
 
 pub fn run() {
     let args = CliArgs::parse(std::env::args().skip(1));
@@ -32,6 +32,7 @@ impl CliArgs {
         let mut mode = None;
         let mut output_name = None;
         let mut lines = Vec::new();
+        let mut rewards = Vec::new();
         let mut config_overrides = CliConfigOverrides::default();
         let mut args = args.peekable();
 
@@ -46,10 +47,16 @@ impl CliArgs {
                 }
                 "--debug-monitor-info" => mode = Some("monitor-info"),
                 "--debug-test-overlay" => mode = Some("test"),
+                "--reward-overlay" => mode = Some("rewards"),
                 "--output" => output_name = args.next(),
                 "--line" => {
                     if let Some(line) = args.next() {
                         lines.push(line);
+                    }
+                }
+                "--reward-name" => {
+                    if let Some(name) = args.next() {
+                        rewards.push(RewardOverlayEntry::name_only(name));
                     }
                 }
                 _ => {}
@@ -57,7 +64,7 @@ impl CliArgs {
         }
 
         Self {
-            debug_overlay: debug_overlay_from(mode, output_name, lines),
+            debug_overlay: debug_overlay_from(mode, output_name, lines, rewards),
             config_overrides,
         }
     }
@@ -67,10 +74,15 @@ fn debug_overlay_from(
     mode: Option<&'static str>,
     output_name: Option<String>,
     lines: Vec<String>,
+    rewards: Vec<RewardOverlayEntry>,
 ) -> Option<overlay::DebugOverlay> {
     match mode {
         Some("monitor-info") => Some(overlay::DebugOverlay::MonitorInfo { output_name, lines }),
         Some("test") => Some(overlay::DebugOverlay::Test { output_name }),
+        Some("rewards") => Some(overlay::DebugOverlay::Rewards {
+            output_name,
+            rewards,
+        }),
         _ => None,
     }
 }
@@ -106,6 +118,36 @@ mod tests {
                 assert_eq!(lines, vec!["size: 1920x1080"]);
             }
             _ => panic!("expected monitor info debug overlay"),
+        }
+    }
+
+    #[test]
+    fn cli_args_parse_reward_overlay_entries() {
+        let args = CliArgs::parse(
+            [
+                "--reward-overlay",
+                "--output",
+                "DP-1",
+                "--reward-name",
+                "Forma Blueprint",
+                "--reward-name",
+                "Braton Prime Receiver",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        );
+
+        match args.debug_overlay {
+            Some(overlay::DebugOverlay::Rewards {
+                output_name,
+                rewards,
+            }) => {
+                assert_eq!(output_name.as_deref(), Some("DP-1"));
+                assert_eq!(rewards.len(), 2);
+                assert_eq!(rewards[0].name, "Forma Blueprint");
+                assert_eq!(rewards[1].name, "Braton Prime Receiver");
+            }
+            _ => panic!("expected reward overlay"),
         }
     }
 }
