@@ -35,9 +35,21 @@ impl RewardNameRegionDetector {
 
 impl RegionDetector for RewardNameRegionDetector {
     fn detect_regions(&self, frame: &CapturedFrame) -> Result<Vec<ScanRegion>> {
+        log::debug!(
+            "detecting reward name regions in frame {}x{} with theme={}",
+            frame.width(),
+            frame.height(),
+            self.theme
+        );
+
         let frame_size = FrameSize::new(frame.width(), frame.height())?;
         let scaling = screen_scaling(frame.width(), frame.height());
         let prefilter_bounds = calculate_prefilter_bounds(frame_size, scaling)?;
+
+        log::debug!(
+            "reward screen geometry: scaling={scaling:.3} prefilter_bounds={prefilter_bounds:?}"
+        );
+
         let prefilter = crop(frame.image(), prefilter_bounds)?;
         let rows = calculate_row_histogram(&prefilter, self.theme);
         let reward_text_scale =
@@ -46,7 +58,11 @@ impl RegionDetector for RewardNameRegionDetector {
             calculate_reward_line_bounds(frame_size, prefilter_bounds, scaling, reward_text_scale)?;
         let layout = detect_reward_layout(frame.image(), reward_line_bounds, self.theme)?;
 
-        Ok((0..layout.player_count)
+        log::debug!(
+            "reward screen geometry: reward_text_scale={reward_text_scale:.3} reward_line_bounds={reward_line_bounds:?} layout={layout:?}"
+        );
+
+        let regions = (0..layout.player_count)
             .map(|index| {
                 let bounds = Rect {
                     x: reward_line_bounds.x + layout.left_offset + index * layout.slot_width,
@@ -57,7 +73,14 @@ impl RegionDetector for RewardNameRegionDetector {
 
                 ScanRegion::new(format!("reward-name-{index}"), bounds)
             })
-            .collect())
+            .collect::<Vec<_>>();
+
+        log::debug!(
+            "detected {} reward name region(s): {regions:?}",
+            regions.len()
+        );
+
+        Ok(regions)
     }
 }
 
@@ -74,15 +97,33 @@ impl RewardNamePreprocessor {
 
 impl ImagePreprocessor for RewardNamePreprocessor {
     fn preprocess(&self, frame: &CapturedFrame, region: &ScanRegion) -> Result<OcrImage> {
+        log::debug!(
+            "preprocessing reward name region={} bounds={:?} with theme={}",
+            region.id,
+            region.bounds,
+            self.theme
+        );
+
         let mut filtered = crop(frame.image(), region.bounds)?.into_rgb8();
+        let mut text_pixels = 0usize;
+        let mut background_pixels = 0usize;
 
         for pixel in filtered.pixels_mut() {
             if self.theme.threshold_filter(*pixel) {
                 *pixel = Rgb([0, 0, 0]);
+                text_pixels += 1;
             } else {
                 *pixel = Rgb([255, 255, 255]);
+                background_pixels += 1;
             }
         }
+
+        log::debug!(
+            "preprocessed reward name region={} into binary OCR image text_pixels={} background_pixels={}",
+            region.id,
+            text_pixels,
+            background_pixels
+        );
 
         Ok(OcrImage::new(
             region.clone(),
@@ -124,14 +165,38 @@ where
     type Output = Vec<RewardNameCandidate>;
 
     fn scan(&self, frame: &CapturedFrame) -> Result<Self::Output> {
+        log::debug!(
+            "starting reward screen OCR scan for frame {}x{}",
+            frame.width(),
+            frame.height()
+        );
+
         let regions = self.detector.detect_regions(frame)?;
+        log::debug!(
+            "reward screen OCR scan will process {} region(s)",
+            regions.len()
+        );
         let mut reward_names = Vec::new();
 
         for region in regions {
+            log::debug!("running reward OCR region pipeline for {}", region.id);
             let image = self.preprocessor.preprocess(frame, &region)?;
             let candidates = self.recognizer.recognize(&image, &self.options)?;
+            log::debug!(
+                "reward OCR recognizer returned {} candidate(s) for {}",
+                candidates.len(),
+                region.id
+            );
             reward_names.extend(candidates.into_iter().map(|candidate| {
                 let normalized_text = normalize_reward_ocr_text(&candidate.text);
+
+                log::debug!(
+                    "reward OCR candidate for {}: raw_len={} normalized={:?} confidence={:?}",
+                    region.id,
+                    candidate.text.len(),
+                    normalized_text,
+                    candidate.confidence
+                );
 
                 RewardNameCandidate {
                     raw_text: candidate.text,
@@ -141,6 +206,11 @@ where
                 }
             }));
         }
+
+        log::debug!(
+            "reward screen OCR scan completed with {} reward name candidate(s)",
+            reward_names.len()
+        );
 
         Ok(reward_names)
     }
@@ -254,6 +324,10 @@ fn detect_reward_layout(
     }
 
     if total_even == 0.0 && total_odd == 0.0 {
+        log::debug!(
+            "reward layout detection found no themed pixels in reward line bounds={reward_line_bounds:?}"
+        );
+
         return Ok(RewardLayout {
             left_offset: 0,
             slot_width: width / 4,
@@ -267,6 +341,10 @@ fn detect_reward_layout(
     } else {
         (0, 4)
     };
+
+    log::debug!(
+        "reward layout weights: total_even={total_even:.3} total_odd={total_odd:.3} player_count={player_count}"
+    );
 
     Ok(RewardLayout {
         left_offset,
@@ -333,7 +411,14 @@ fn find_best_reward_text_scale(
         }
     }
 
-    best_scale as f32 / 100.0
+    let best_scale = best_scale as f32 / 100.0;
+    log::debug!(
+        "best reward text scale={best_scale:.3} lowest_weight={lowest_weight:.3} prefilter={}x{}",
+        image_width,
+        image_height
+    );
+
+    best_scale
 }
 
 fn average_weight(range: impl Iterator<Item = usize>, weight: impl Fn(usize) -> f32) -> f32 {
@@ -354,6 +439,12 @@ fn average_weight(range: impl Iterator<Item = usize>, weight: impl Fn(usize) -> 
 
 fn crop(image: &DynamicImage, bounds: Rect) -> Result<DynamicImage> {
     if bounds.right() > image.width() || bounds.bottom() > image.height() {
+        log::debug!(
+            "OCR crop bounds are outside image: bounds={bounds:?} image={}x{}",
+            image.width(),
+            image.height()
+        );
+
         return Err(OcrError::UnsupportedFrame(format!(
             "scan region {:?} is outside captured frame {}x{}",
             bounds,
@@ -367,6 +458,10 @@ fn crop(image: &DynamicImage, bounds: Rect) -> Result<DynamicImage> {
 
 fn rect_from_f32(x: f32, y: f32, width: f32, height: f32) -> Result<Rect> {
     if x < 0.0 || y < 0.0 || width <= 0.0 || height <= 0.0 {
+        log::debug!(
+            "invalid floating point OCR bounds x={x}, y={y}, width={width}, height={height}"
+        );
+
         return Err(OcrError::UnsupportedFrame(format!(
             "invalid reward OCR bounds x={x}, y={y}, width={width}, height={height}"
         )));

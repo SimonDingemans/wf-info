@@ -22,6 +22,24 @@ pub enum RewardUiTheme {
 }
 
 impl RewardUiTheme {
+    pub const ALL: [Self; 15] = [
+        Self::Vitruvian,
+        Self::Stalker,
+        Self::Baruuk,
+        Self::Corpus,
+        Self::Fortuna,
+        Self::Grineer,
+        Self::Lotus,
+        Self::Nidus,
+        Self::Orokin,
+        Self::Tenno,
+        Self::HighContrast,
+        Self::Legacy,
+        Self::Equinox,
+        Self::DarkLotus,
+        Self::Zephyr,
+    ];
+
     pub fn from_config_key(value: &str) -> Option<Self> {
         let normalized = value
             .chars()
@@ -193,6 +211,14 @@ mod tests {
             Some(RewardUiTheme::HighContrast)
         );
         assert_eq!(RewardUiTheme::from_config_key("unknown"), None);
+    }
+
+    #[test]
+    fn all_themes_contains_each_configurable_theme() {
+        assert_eq!(RewardUiTheme::ALL.len(), 15);
+        assert!(RewardUiTheme::ALL.contains(&RewardUiTheme::Lotus));
+        assert!(RewardUiTheme::ALL.contains(&RewardUiTheme::Vitruvian));
+        assert!(RewardUiTheme::ALL.contains(&RewardUiTheme::Zephyr));
     }
 
     #[test]

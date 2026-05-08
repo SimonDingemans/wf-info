@@ -3250,8 +3250,11 @@ dependencies = [
 name = "ocr"
 version = "0.1.0"
 dependencies = [
+ "ashpd",
+ "async-io",
  "image",
  "kreuzberg-tesseract",
+ "log",
  "thiserror 2.0.18",
 ]
 

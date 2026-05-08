@@ -13,6 +13,9 @@ pub enum OcrError {
     #[error("image processing failed: {0}")]
     ImageProcessing(String),
 
+    #[error("capture failed: {0}")]
+    Capture(String),
+
     #[error("unsupported OCR frame: {0}")]
     UnsupportedFrame(String),
 }

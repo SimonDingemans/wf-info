@@ -13,6 +13,12 @@ pub struct TesseractRecognizer {
 
 impl TesseractRecognizer {
     pub fn new(options: &OcrOptions) -> Result<Self> {
+        log::debug!(
+            "creating Tesseract OCR recognizer with language={} configured_datapath={:?}",
+            options.language,
+            options.tesseract_data_path
+        );
+
         let engine = Tesseract::new().map_err(|err| {
             OcrError::Initialization(format!("could not create Tesseract: {err}"))
         })?;
@@ -21,11 +27,19 @@ impl TesseractRecognizer {
             .clone()
             .unwrap_or_else(default_tessdata_path);
 
+        log::debug!(
+            "initializing Tesseract OCR engine with datapath={} language={}",
+            data_path,
+            options.language
+        );
+
         engine.init(&data_path, &options.language).map_err(|err| {
             OcrError::Initialization(format!(
                 "could not initialize Tesseract with datapath {data_path}: {err}"
             ))
         })?;
+
+        log::debug!("Tesseract OCR recognizer initialized");
 
         Ok(Self {
             engine: Mutex::new(Some(engine)),
@@ -35,6 +49,14 @@ impl TesseractRecognizer {
 
 impl TextRecognizer for TesseractRecognizer {
     fn recognize(&self, image: &OcrImage, _options: &OcrOptions) -> Result<Vec<TextCandidate>> {
+        log::debug!(
+            "running Tesseract OCR for region={} bounds={:?} image={}x{}",
+            image.region().id,
+            image.region().bounds,
+            image.image().width(),
+            image.image().height()
+        );
+
         let engine = self
             .engine
             .lock()
@@ -60,6 +82,13 @@ impl TextRecognizer for TesseractRecognizer {
             .map_err(|err| OcrError::Processing(format!("could not read OCR text: {err}")))?;
         let _ = engine.clear();
 
+        log::debug!(
+            "Tesseract OCR completed for region={} text_len={} preview={:?}",
+            image.region().id,
+            text.len(),
+            text_preview(&text)
+        );
+
         Ok(vec![TextCandidate::new(
             text,
             None,
@@ -70,11 +99,13 @@ impl TextRecognizer for TesseractRecognizer {
 
 fn default_tessdata_path() -> String {
     if let Ok(prefix) = env::var("TESSDATA_PREFIX") {
+        log::debug!("using TESSDATA_PREFIX for Tesseract datapath: {prefix}");
         return prefix;
     }
 
     let local_path = Path::new("tessdata");
     if local_path.exists() && local_path.is_dir() && local_path.join("eng.traineddata").exists() {
+        log::debug!("using local Tesseract datapath: {}", local_path.display());
         return local_path.to_string_lossy().to_string();
     }
 
@@ -86,9 +117,27 @@ fn default_tessdata_path() -> String {
             && exe_tessdata.is_dir()
             && exe_tessdata.join("eng.traineddata").exists()
         {
+            log::debug!(
+                "using executable-adjacent Tesseract datapath: {}",
+                exe_tessdata.display()
+            );
             return exe_tessdata.to_string_lossy().to_string();
         }
     }
 
+    log::debug!("using fallback Tesseract datapath: /usr/share/tessdata");
     "/usr/share/tessdata".to_owned()
+}
+
+fn text_preview(text: &str) -> String {
+    const MAX_CHARS: usize = 80;
+
+    let mut preview = text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    if preview.chars().count() > MAX_CHARS {
+        preview = preview.chars().take(MAX_CHARS).collect::<String>();
+        preview.push_str("...");
+    }
+
+    preview
 }

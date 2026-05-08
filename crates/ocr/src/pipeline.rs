@@ -5,6 +5,30 @@ use super::Result;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CaptureRequest {
     pub monitor: String,
+    pub region: Option<CaptureRegion>,
+}
+
+impl CaptureRequest {
+    pub fn new(monitor: impl Into<String>) -> Self {
+        Self {
+            monitor: monitor.into(),
+            region: None,
+        }
+    }
+
+    pub fn with_region(mut self, region: Rect, desktop_bounds: Rect) -> Self {
+        self.region = Some(CaptureRegion {
+            region,
+            desktop_bounds,
+        });
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CaptureRegion {
+    pub region: Rect,
+    pub desktop_bounds: Rect,
 }
 
 #[derive(Clone, Debug)]

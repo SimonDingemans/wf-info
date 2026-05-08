@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+ashpd.workspace = true
+async-io.workspace = true
 image.workspace = true
 kreuzberg-tesseract.workspace = true
+log.workspace = true
 thiserror.workspace = true
