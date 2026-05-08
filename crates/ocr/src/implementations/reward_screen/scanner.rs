@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, fs, path::PathBuf};
 
 use image::{DynamicImage, GenericImageView, Pixel, Rgb};
 
@@ -141,20 +141,31 @@ pub struct RewardNameCandidate {
 }
 
 pub struct RewardScreenScanner<R> {
+    theme: RewardUiTheme,
     detector: RewardNameRegionDetector,
     preprocessor: RewardNamePreprocessor,
     recognizer: R,
     options: OcrOptions,
+    debug: RewardScreenScanDebug,
 }
 
 impl<R> RewardScreenScanner<R> {
     pub fn new(recognizer: R, theme: RewardUiTheme, options: OcrOptions) -> Self {
         Self {
+            theme,
             detector: RewardNameRegionDetector::new(theme),
             preprocessor: RewardNamePreprocessor::new(theme),
             recognizer,
             options,
+            debug: RewardScreenScanDebug::Disabled,
         }
+    }
+
+    pub fn with_debug_images(mut self, debug_dir: impl Into<PathBuf>) -> Self {
+        self.debug = RewardScreenScanDebug::Images {
+            directory: debug_dir.into(),
+        };
+        self
     }
 }
 
@@ -171,7 +182,17 @@ where
             frame.height()
         );
 
+        self.debug.prepare(frame)?;
+
         let regions = self.detector.detect_regions(frame)?;
+        if regions.is_empty() && self.debug.enabled() {
+            log::debug!(
+                "configured reward UI theme {} detected no reward name regions; probing other themes for diagnostics",
+                self.theme
+            );
+            log_theme_region_probe(frame, self.theme);
+        }
+
         log::debug!(
             "reward screen OCR scan will process {} region(s)",
             regions.len()
@@ -181,6 +202,7 @@ where
         for region in regions {
             log::debug!("running reward OCR region pipeline for {}", region.id);
             let image = self.preprocessor.preprocess(frame, &region)?;
+            self.debug.save_tesseract_input(&region, image.image())?;
             let candidates = self.recognizer.recognize(&image, &self.options)?;
             log::debug!(
                 "reward OCR recognizer returned {} candidate(s) for {}",
@@ -214,6 +236,96 @@ where
 
         Ok(reward_names)
     }
+}
+
+#[derive(Clone, Debug)]
+enum RewardScreenScanDebug {
+    Disabled,
+    Images { directory: PathBuf },
+}
+
+impl RewardScreenScanDebug {
+    fn enabled(&self) -> bool {
+        matches!(self, Self::Images { .. })
+    }
+
+    fn prepare(&self, frame: &CapturedFrame) -> Result<()> {
+        let Self::Images { directory } = self else {
+            return Ok(());
+        };
+
+        fs::create_dir_all(directory).map_err(|err| {
+            OcrError::ImageProcessing(format!(
+                "could not create reward OCR debug directory {}: {err}",
+                directory.display()
+            ))
+        })?;
+
+        save_debug_image(frame.image(), directory.join("latest-ocr-frame.png"))
+    }
+
+    fn save_tesseract_input(&self, region: &ScanRegion, image: &DynamicImage) -> Result<()> {
+        let Self::Images { directory } = self else {
+            return Ok(());
+        };
+
+        let safe_region_id = safe_filename_part(&region.id);
+        save_debug_image(
+            image,
+            directory.join(format!("latest-{safe_region_id}-tesseract-input.png")),
+        )?;
+        save_debug_image(
+            image,
+            directory.join(format!("{safe_region_id}-tesseract-input.png")),
+        )
+    }
+}
+
+fn log_theme_region_probe(frame: &CapturedFrame, configured_theme: RewardUiTheme) {
+    for theme in RewardUiTheme::ALL {
+        if theme == configured_theme {
+            continue;
+        }
+
+        let detector = RewardNameRegionDetector::new(theme);
+        match detector.detect_regions(frame) {
+            Ok(regions) if regions.is_empty() => {}
+            Ok(regions) => {
+                log::debug!(
+                    "reward UI theme probe: theme={} detected {} reward name region(s)",
+                    theme,
+                    regions.len()
+                );
+            }
+            Err(err) => {
+                log::debug!("reward UI theme probe failed for theme={theme}: {err}");
+            }
+        }
+    }
+}
+
+fn save_debug_image(image: &image::DynamicImage, path: PathBuf) -> Result<()> {
+    image.save(&path).map_err(|err| {
+        OcrError::ImageProcessing(format!(
+            "could not save reward OCR debug image {}: {err}",
+            path.display()
+        ))
+    })?;
+    log::debug!("saved reward OCR debug image to {}", path.display());
+    Ok(())
+}
+
+fn safe_filename_part(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect()
 }
 
 pub fn normalize_reward_ocr_text(text: &str) -> String {
