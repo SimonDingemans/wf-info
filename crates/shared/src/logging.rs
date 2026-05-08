@@ -1,4 +1,4 @@
-use crate::{AppContext, config::LoggingSettings};
+use crate::{AppContext, config::LoggingConfig};
 
 const WORKSPACE_LOG_TARGETS: &[&str] = &["application", "overlay", "shared", "wf_info"];
 
@@ -7,7 +7,7 @@ pub fn init(context: &AppContext) -> Result<(), String> {
     init_with_settings(&settings.logging)
 }
 
-fn init_with_settings(settings: &LoggingSettings) -> Result<(), String> {
+fn init_with_settings(settings: &LoggingConfig) -> Result<(), String> {
     let mut builder = env_logger::Builder::new();
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| settings.level.clone());
 
@@ -95,11 +95,11 @@ fn is_workspace_log_target(target: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{init_with_settings, workspace_scoped_filter};
-    use crate::config::LoggingSettings;
+    use crate::config::LoggingConfig;
 
     #[test]
     fn logging_init_accepts_configured_level() {
-        let settings = LoggingSettings {
+        let settings = LoggingConfig {
             level: "debug".to_owned(),
             file: String::new(),
         };

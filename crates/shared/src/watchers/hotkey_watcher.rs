@@ -8,7 +8,7 @@ use ashpd::desktop::global_shortcuts::{BindShortcutsOptions, GlobalShortcuts, Ne
 use futures_util::{FutureExt, StreamExt, pin_mut, select};
 use thiserror::Error;
 
-use crate::config::HotkeySettings;
+use crate::config::HotkeyConfig;
 use crate::watchers::events::ServiceEvent;
 
 const HOTKEY_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -180,7 +180,7 @@ impl GlobalHotkeyWatcher {
     }
 }
 
-pub fn phase_one_hotkey_bindings(settings: &HotkeySettings) -> Vec<HotkeyBinding> {
+pub fn phase_one_hotkey_bindings(settings: &HotkeyConfig) -> Vec<HotkeyBinding> {
     vec![
         HotkeyBinding::new(HotkeyAction::TriggerRewardScan, &settings.activation),
         HotkeyBinding::new(HotkeyAction::DismissOverlay, &settings.dismiss_overlay),
@@ -307,11 +307,11 @@ fn portal_error(err: ashpd::Error) -> HotkeyWatcherError {
 #[cfg(test)]
 mod tests {
     use super::{HotkeyAction, HotkeyBinding, HotkeyWatcherError, phase_one_hotkey_bindings};
-    use crate::config::HotkeySettings;
+    use crate::config::HotkeyConfig;
 
     #[test]
     fn phase_one_bindings_map_settings_to_actions() {
-        let settings = HotkeySettings {
+        let settings = HotkeyConfig {
             activation: "F12".to_owned(),
             dismiss_overlay: "control+F11".to_owned(),
         };

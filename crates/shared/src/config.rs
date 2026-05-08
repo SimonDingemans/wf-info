@@ -24,21 +24,11 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn for_app(app_name: &str) -> Result<Self, String> {
-        Self::read(Self::path_for_app(app_name))
-    }
-
     pub fn with_cli_overrides(mut self, overrides: &CliConfigOverrides) -> Self {
-        self.apply_cli_overrides(overrides);
+        if let Some(level) = overrides.logging_level() {
+            self.logging.level = level.to_owned();
+        }
         self
-    }
-
-    pub fn apply_cli_overrides(&mut self, overrides: &CliConfigOverrides) {
-        self.logging.apply_cli_overrides(&overrides.logging);
-    }
-
-    pub fn from_settings(settings: &Settings) -> Self {
-        Self::from(settings)
     }
 
     pub fn path_for_app(app_name: &str) -> PathBuf {
@@ -80,116 +70,33 @@ impl Config {
         fs::rename(&temporary_path, path).map_err(|err| err.to_string())
     }
 
-    pub fn write_for_app(&self, app_name: &str) -> Result<(), String> {
-        self.write(Self::path_for_app(app_name))
-    }
-}
-
-impl From<&Settings> for Config {
-    fn from(settings: &Settings) -> Self {
-        Self {
-            app: AppConfig::from(&settings.app),
-            capture: CaptureConfig::from(&settings.capture),
-            scanner: ScannerConfig::from(&settings.scanner),
-            hotkeys: HotkeyConfig::from(&settings.hotkeys),
-            overlay: OverlayConfig::from(&settings.overlay),
-            ocr: OcrConfig::from(&settings.ocr),
-            warframe: WarframeConfig::from(&settings.warframe),
-            logging: LoggingConfig::from(&settings.logging),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Settings {
-    pub app: AppSettings,
-    pub capture: CaptureSettings,
-    pub scanner: ScannerSettings,
-    pub hotkeys: HotkeySettings,
-    pub overlay: OverlaySettings,
-    pub ocr: OcrSettings,
-    pub warframe: WarframeSettings,
-    pub logging: LoggingSettings,
-}
-
-impl Settings {
-    pub fn apply_cli_overrides(&mut self, overrides: &CliConfigOverrides) {
-        self.logging.apply_cli_overrides(&overrides.logging);
-    }
-
-    pub fn to_config(&self) -> Config {
-        Config::from(self)
-    }
-
     pub fn capture_portal_restore_token(&self) -> Option<&str> {
-        self.capture.portal_restore_token()
+        self.capture.portal_restore_token.as_deref()
     }
 
     pub fn set_capture_monitor(&mut self, monitor: impl Into<String>) {
-        self.capture.set_monitor(monitor);
+        self.capture.monitor = monitor.into();
     }
 
     pub fn set_capture_portal_restore_token(&mut self, restore_token: impl Into<String>) {
-        self.capture.set_portal_restore_token(restore_token);
+        self.capture.portal_restore_token = Some(restore_token.into());
     }
 }
 
+pub type Settings = Config;
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CliConfigOverrides {
-    logging: CliLoggingOverrides,
+    logging_level: Option<String>,
 }
 
 impl CliConfigOverrides {
     pub fn set_logging_level(&mut self, level: impl Into<String>) {
-        self.logging.set_level(level);
+        self.logging_level = Some(level.into());
     }
 
     pub fn logging_level(&self) -> Option<&str> {
-        self.logging.level()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.logging.is_empty()
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct CliLoggingOverrides {
-    level: Option<String>,
-}
-
-impl CliLoggingOverrides {
-    fn set_level(&mut self, level: impl Into<String>) {
-        self.level = Some(level.into());
-    }
-
-    fn level(&self) -> Option<&str> {
-        self.level.as_deref()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.level.is_none()
-    }
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self::from(Config::default())
-    }
-}
-
-impl From<Config> for Settings {
-    fn from(config: Config) -> Self {
-        Self {
-            app: AppSettings::from(config.app),
-            capture: CaptureSettings::from(config.capture),
-            scanner: ScannerSettings::from(config.scanner),
-            hotkeys: HotkeySettings::from(config.hotkeys),
-            overlay: OverlaySettings::from(config.overlay),
-            ocr: OcrSettings::from(config.ocr),
-            warframe: WarframeSettings::from(config.warframe),
-            logging: LoggingSettings::from(config.logging),
-        }
+        self.logging_level.as_deref()
     }
 }
 
@@ -206,30 +113,6 @@ impl Default for AppConfig {
         Self {
             locale: default_locale(),
             start_minimized: false,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AppSettings {
-    pub locale: String,
-    pub start_minimized: bool,
-}
-
-impl From<AppConfig> for AppSettings {
-    fn from(config: AppConfig) -> Self {
-        Self {
-            locale: config.locale,
-            start_minimized: config.start_minimized,
-        }
-    }
-}
-
-impl From<&AppSettings> for AppConfig {
-    fn from(settings: &AppSettings) -> Self {
-        Self {
-            locale: settings.locale.clone(),
-            start_minimized: settings.start_minimized,
         }
     }
 }
@@ -260,53 +143,6 @@ impl Default for CaptureConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CaptureSettings {
-    pub monitor: String,
-    pub capture_method: String,
-    pub display_mode: String,
-    pub aspect_ratio: String,
-    pub portal_restore_token: Option<String>,
-}
-
-impl CaptureSettings {
-    pub fn portal_restore_token(&self) -> Option<&str> {
-        self.portal_restore_token.as_deref()
-    }
-
-    pub fn set_monitor(&mut self, monitor: impl Into<String>) {
-        self.monitor = monitor.into();
-    }
-
-    pub fn set_portal_restore_token(&mut self, restore_token: impl Into<String>) {
-        self.portal_restore_token = Some(restore_token.into());
-    }
-}
-
-impl From<CaptureConfig> for CaptureSettings {
-    fn from(config: CaptureConfig) -> Self {
-        Self {
-            monitor: config.monitor,
-            capture_method: config.capture_method,
-            display_mode: config.display_mode,
-            aspect_ratio: config.aspect_ratio,
-            portal_restore_token: config.portal_restore_token,
-        }
-    }
-}
-
-impl From<&CaptureSettings> for CaptureConfig {
-    fn from(settings: &CaptureSettings) -> Self {
-        Self {
-            monitor: settings.monitor.clone(),
-            capture_method: settings.capture_method.clone(),
-            display_mode: settings.display_mode.clone(),
-            aspect_ratio: settings.aspect_ratio.clone(),
-            portal_restore_token: settings.portal_restore_token.clone(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct ScannerConfig {
     #[serde(default = "default_true")]
@@ -330,36 +166,6 @@ impl Default for ScannerConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ScannerSettings {
-    pub enabled: bool,
-    pub auto_delay_ms: u64,
-    pub debug_images: bool,
-    pub debug_image_retention_hours: u64,
-}
-
-impl From<ScannerConfig> for ScannerSettings {
-    fn from(config: ScannerConfig) -> Self {
-        Self {
-            enabled: config.enabled,
-            auto_delay_ms: config.auto_delay_ms,
-            debug_images: config.debug_images,
-            debug_image_retention_hours: config.debug_image_retention_hours,
-        }
-    }
-}
-
-impl From<&ScannerSettings> for ScannerConfig {
-    fn from(settings: &ScannerSettings) -> Self {
-        Self {
-            enabled: settings.enabled,
-            auto_delay_ms: settings.auto_delay_ms,
-            debug_images: settings.debug_images,
-            debug_image_retention_hours: settings.debug_image_retention_hours,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct HotkeyConfig {
     #[serde(default = "default_activation_hotkey")]
@@ -373,30 +179,6 @@ impl Default for HotkeyConfig {
         Self {
             activation: default_activation_hotkey(),
             dismiss_overlay: default_dismiss_overlay_hotkey(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HotkeySettings {
-    pub activation: String,
-    pub dismiss_overlay: String,
-}
-
-impl From<HotkeyConfig> for HotkeySettings {
-    fn from(config: HotkeyConfig) -> Self {
-        Self {
-            activation: config.activation,
-            dismiss_overlay: config.dismiss_overlay,
-        }
-    }
-}
-
-impl From<&HotkeySettings> for HotkeyConfig {
-    fn from(settings: &HotkeySettings) -> Self {
-        Self {
-            activation: settings.activation.clone(),
-            dismiss_overlay: settings.dismiss_overlay.clone(),
         }
     }
 }
@@ -427,39 +209,6 @@ impl Default for OverlayConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OverlaySettings {
-    pub enabled: bool,
-    pub x_offset: i32,
-    pub y_offset: i32,
-    pub duration_ms: u64,
-    pub high_contrast: bool,
-}
-
-impl From<OverlayConfig> for OverlaySettings {
-    fn from(config: OverlayConfig) -> Self {
-        Self {
-            enabled: config.enabled,
-            x_offset: config.x_offset,
-            y_offset: config.y_offset,
-            duration_ms: config.duration_ms,
-            high_contrast: config.high_contrast,
-        }
-    }
-}
-
-impl From<&OverlaySettings> for OverlayConfig {
-    fn from(settings: &OverlaySettings) -> Self {
-        Self {
-            enabled: settings.enabled,
-            x_offset: settings.x_offset,
-            y_offset: settings.y_offset,
-            duration_ms: settings.duration_ms,
-            high_contrast: settings.high_contrast,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OcrConfig {
     #[serde(default = "default_ocr_language")]
@@ -476,33 +225,6 @@ impl Default for OcrConfig {
             language: default_ocr_language(),
             tesseract_data_path: String::new(),
             confidence_threshold: 0.0,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct OcrSettings {
-    pub language: String,
-    pub tesseract_data_path: String,
-    pub confidence_threshold: f32,
-}
-
-impl From<OcrConfig> for OcrSettings {
-    fn from(config: OcrConfig) -> Self {
-        Self {
-            language: config.language,
-            tesseract_data_path: config.tesseract_data_path,
-            confidence_threshold: config.confidence_threshold,
-        }
-    }
-}
-
-impl From<&OcrSettings> for OcrConfig {
-    fn from(settings: &OcrSettings) -> Self {
-        Self {
-            language: settings.language.clone(),
-            tesseract_data_path: settings.tesseract_data_path.clone(),
-            confidence_threshold: settings.confidence_threshold,
         }
     }
 }
@@ -524,30 +246,6 @@ impl Default for WarframeConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct WarframeSettings {
-    pub log_path: String,
-    pub ui_theme: String,
-}
-
-impl From<WarframeConfig> for WarframeSettings {
-    fn from(config: WarframeConfig) -> Self {
-        Self {
-            log_path: config.log_path,
-            ui_theme: config.ui_theme,
-        }
-    }
-}
-
-impl From<&WarframeSettings> for WarframeConfig {
-    fn from(settings: &WarframeSettings) -> Self {
-        Self {
-            log_path: settings.log_path.clone(),
-            ui_theme: settings.ui_theme.clone(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct LoggingConfig {
     #[serde(default = "default_log_level")]
@@ -562,54 +260,6 @@ impl Default for LoggingConfig {
             level: default_log_level(),
             file: String::new(),
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LoggingSettings {
-    pub level: String,
-    pub file: String,
-}
-
-impl From<LoggingConfig> for LoggingSettings {
-    fn from(config: LoggingConfig) -> Self {
-        Self {
-            level: config.level,
-            file: config.file,
-        }
-    }
-}
-
-impl From<&LoggingSettings> for LoggingConfig {
-    fn from(settings: &LoggingSettings) -> Self {
-        Self {
-            level: settings.level.clone(),
-            file: settings.file.clone(),
-        }
-    }
-}
-
-impl LoggingConfig {
-    fn apply_cli_overrides(&mut self, overrides: &CliLoggingOverrides) {
-        if let Some(level) = overrides.level() {
-            self.set_level(level);
-        }
-    }
-
-    fn set_level(&mut self, level: impl Into<String>) {
-        self.level = level.into();
-    }
-}
-
-impl LoggingSettings {
-    fn apply_cli_overrides(&mut self, overrides: &CliLoggingOverrides) {
-        if let Some(level) = overrides.level() {
-            self.set_level(level);
-        }
-    }
-
-    fn set_level(&mut self, level: impl Into<String>) {
-        self.level = level.into();
     }
 }
 
@@ -719,8 +369,7 @@ monitor = "DP-1"
         settings.set_capture_monitor("DP-1");
         settings.set_capture_portal_restore_token("token");
 
-        let contents =
-            toml::to_string_pretty(&settings.to_config()).expect("settings should serialize");
+        let contents = toml::to_string_pretty(&settings).expect("settings should serialize");
 
         assert!(contents.contains("[app]"));
         assert!(contents.contains("[capture]"));
@@ -746,7 +395,7 @@ monitor = "DP-1"
             Some("restored-session")
         );
         assert_eq!(
-            settings.to_config().capture.portal_restore_token.as_deref(),
+            settings.capture.portal_restore_token.as_deref(),
             Some("restored-session")
         );
     }
@@ -785,14 +434,10 @@ file = "/tmp/wf-info.log"
         overrides.set_logging_level("debug");
 
         let config = config.with_cli_overrides(&overrides);
-        let mut settings = Settings::from(config.clone());
-        settings.apply_cli_overrides(&overrides);
 
         assert_eq!(overrides.logging_level(), Some("debug"));
         assert_eq!(config.app.locale, "nl");
         assert_eq!(config.logging.level, "debug");
         assert_eq!(config.logging.file, "/tmp/wf-info.log");
-        assert_eq!(settings.logging.level, "debug");
-        assert_eq!(settings.logging.file, "/tmp/wf-info.log");
     }
 }

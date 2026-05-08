@@ -47,6 +47,6 @@ impl AppContext {
     }
 
     pub fn save_settings(&self, settings: &Settings) -> Result<(), String> {
-        settings.to_config().write(&self.config_path)
+        settings.write(&self.config_path)
     }
 }
