@@ -6,9 +6,19 @@ use iced_layershell::reexport::{Anchor, KeyboardInteractivity, Layer};
 use iced_layershell::settings::{LayerShellSettings, Settings, StartMode};
 use iced_layershell::{Application, to_layer_message};
 use shared::{
-    AppContext,
+    AppContext, monitor,
     rewards::{RewardHighlight, RewardOverlayEntry},
 };
+
+const DEFAULT_MONITOR_WIDTH: u32 = 1920;
+const DEFAULT_MONITOR_HEIGHT: u32 = 1080;
+const REWARD_CARD_WIDTH: u32 = 180;
+const REWARD_CARD_HEIGHT: u32 = 154;
+const REWARD_CARD_SPACING: u32 = 10;
+const REWARD_OVERLAY_PADDING: u32 = 18;
+const REWARD_OVERLAY_Y_RATIO: f32 = 0.62;
+const MONITOR_INFO_WIDTH: u32 = 520;
+const MONITOR_INFO_HEIGHT: u32 = 260;
 
 pub enum DebugOverlay {
     MonitorInfo {
@@ -20,6 +30,7 @@ pub enum DebugOverlay {
     },
     Rewards {
         output_name: Option<String>,
+        output_size: Option<(u32, u32)>,
         rewards: Vec<RewardOverlayEntry>,
     },
 }
@@ -39,25 +50,117 @@ pub fn run(context: &AppContext, overlay: DebugOverlay) -> iced_layershell::Resu
         .output_name()
         .map(|output| StartMode::TargetScreen(output.to_owned()))
         .unwrap_or(StartMode::Active);
+    let layer_settings = layer_settings_for_overlay(&overlay, start_mode);
 
     DebugOverlayApp::run(Settings {
         id: Some(format!("{}.debug-overlay", context.name())),
         flags: overlay,
-        layer_settings: LayerShellSettings {
-            anchor: Anchor::Top | Anchor::Right | Anchor::Bottom | Anchor::Left,
-            layer: Layer::Overlay,
-            exclusive_zone: -1,
-            keyboard_interactivity: KeyboardInteractivity::OnDemand,
-            events_transparent: false,
-            start_mode,
-            ..Default::default()
-        },
+        layer_settings,
         fonts: Vec::new(),
         default_font: Font::default(),
         default_text_size: Pixels(16.0),
         antialiasing: true,
         virtual_keyboard_support: None,
     })
+}
+
+fn layer_settings_for_overlay(overlay: &DebugOverlay, start_mode: StartMode) -> LayerShellSettings {
+    let mut settings = LayerShellSettings {
+        layer: Layer::Overlay,
+        exclusive_zone: -1,
+        keyboard_interactivity: KeyboardInteractivity::None,
+        events_transparent: false,
+        start_mode,
+        ..Default::default()
+    };
+
+    match overlay {
+        DebugOverlay::Rewards {
+            output_name,
+            output_size,
+            rewards,
+        } => {
+            let placement = reward_overlay_placement(
+                (*output_size).or_else(|| detect_output_size(output_name.as_deref())),
+                rewards.len(),
+            );
+            settings.anchor = Anchor::Top | Anchor::Left;
+            settings.margin = placement.margin;
+            settings.size = Some(placement.size);
+        }
+        DebugOverlay::MonitorInfo { .. } => {
+            settings.anchor = Anchor::Top | Anchor::Right;
+            settings.margin = (20, 20, 0, 0);
+            settings.size = Some((MONITOR_INFO_WIDTH, MONITOR_INFO_HEIGHT));
+            settings.keyboard_interactivity = KeyboardInteractivity::OnDemand;
+        }
+        DebugOverlay::Test { .. } => {
+            settings.anchor = Anchor::Top | Anchor::Right | Anchor::Bottom | Anchor::Left;
+            settings.keyboard_interactivity = KeyboardInteractivity::OnDemand;
+        }
+    }
+
+    settings
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RewardOverlayPlacement {
+    margin: (i32, i32, i32, i32),
+    size: (u32, u32),
+}
+
+fn reward_overlay_placement(
+    output_size: Option<(u32, u32)>,
+    reward_count: usize,
+) -> RewardOverlayPlacement {
+    let (monitor_width, monitor_height) =
+        output_size.unwrap_or((DEFAULT_MONITOR_WIDTH, DEFAULT_MONITOR_HEIGHT));
+    let size = reward_overlay_surface_size(reward_count, monitor_width);
+    let top = (monitor_height as f32 * REWARD_OVERLAY_Y_RATIO).round() as i32;
+    let left = ((monitor_width.saturating_sub(size.0)) / 2) as i32;
+
+    RewardOverlayPlacement {
+        margin: (top, 0, 0, left),
+        size,
+    }
+}
+
+fn detect_output_size(output_name: Option<&str>) -> Option<(u32, u32)> {
+    let Some(output_name) = output_name else {
+        return None;
+    };
+
+    match monitor::detect_monitor_info() {
+        Ok(monitors) => {
+            let size = monitors
+                .iter()
+                .find(|monitor| monitor.matches_target(output_name))
+                .and_then(|monitor| monitor.size)
+                .and_then(|(width, height)| {
+                    (width > 0 && height > 0).then_some((width as u32, height as u32))
+                });
+
+            if size.is_none() {
+                log::warn!("could not find monitor size for reward overlay target {output_name}");
+            }
+
+            size
+        }
+        Err(err) => {
+            log::warn!("could not detect monitor size for reward overlay placement: {err}");
+            None
+        }
+    }
+}
+
+fn reward_overlay_surface_size(reward_count: usize, monitor_width: u32) -> (u32, u32) {
+    let reward_count = reward_count.clamp(1, 4) as u32;
+    let card_width = reward_count * REWARD_CARD_WIDTH;
+    let spacing = reward_count.saturating_sub(1) * REWARD_CARD_SPACING;
+    let width = (card_width + spacing + 2 * REWARD_OVERLAY_PADDING).min(monitor_width);
+    let height = REWARD_CARD_HEIGHT + 2 * REWARD_OVERLAY_PADDING;
+
+    (width, height)
 }
 
 struct DebugOverlayApp {
@@ -332,7 +435,11 @@ fn best_platinum_reward_index(rewards: &[RewardOverlayEntry]) -> Option<usize> {
 mod tests {
     use shared::rewards::{RewardHighlight, RewardOverlayEntry};
 
-    use super::{best_platinum_reward_index, reward_is_best_platinum};
+    use super::{
+        DEFAULT_MONITOR_HEIGHT, DEFAULT_MONITOR_WIDTH, REWARD_CARD_HEIGHT, REWARD_CARD_SPACING,
+        REWARD_CARD_WIDTH, REWARD_OVERLAY_PADDING, best_platinum_reward_index,
+        reward_is_best_platinum, reward_overlay_placement, reward_overlay_surface_size,
+    };
 
     #[test]
     fn best_platinum_reward_index_uses_highest_available_platinum_value() {
@@ -361,5 +468,39 @@ mod tests {
         reward.highlight = RewardHighlight::BestPlatinum;
 
         assert!(reward_is_best_platinum(0, &reward, None));
+    }
+
+    #[test]
+    fn reward_overlay_surface_size_tracks_card_count() {
+        let expected_width =
+            4 * REWARD_CARD_WIDTH + 3 * REWARD_CARD_SPACING + 2 * REWARD_OVERLAY_PADDING;
+        let expected_height = REWARD_CARD_HEIGHT + 2 * REWARD_OVERLAY_PADDING;
+
+        assert_eq!(
+            reward_overlay_surface_size(4, DEFAULT_MONITOR_WIDTH),
+            (expected_width, expected_height)
+        );
+    }
+
+    #[test]
+    fn reward_overlay_surface_size_clamps_to_monitor_width() {
+        assert_eq!(reward_overlay_surface_size(4, 320).0, 320);
+    }
+
+    #[test]
+    fn reward_overlay_placement_uses_default_monitor_when_output_size_is_unknown() {
+        let placement = reward_overlay_placement(None, 4);
+        let expected_size = reward_overlay_surface_size(4, DEFAULT_MONITOR_WIDTH);
+
+        assert_eq!(placement.size, expected_size);
+        assert_eq!(
+            placement.margin,
+            (
+                (DEFAULT_MONITOR_HEIGHT as f32 * super::REWARD_OVERLAY_Y_RATIO).round() as i32,
+                0,
+                0,
+                ((DEFAULT_MONITOR_WIDTH - expected_size.0) / 2) as i32
+            )
+        );
     }
 }

@@ -31,6 +31,8 @@ impl CliArgs {
     fn parse(args: impl Iterator<Item = String>) -> Self {
         let mut mode = None;
         let mut output_name = None;
+        let mut output_width = None;
+        let mut output_height = None;
         let mut lines = Vec::new();
         let mut rewards = Vec::new();
         let mut config_overrides = CliConfigOverrides::default();
@@ -49,6 +51,10 @@ impl CliArgs {
                 "--debug-test-overlay" => mode = Some("test"),
                 "--reward-overlay" => mode = Some("rewards"),
                 "--output" => output_name = args.next(),
+                "--output-width" => output_width = args.next().and_then(|value| value.parse().ok()),
+                "--output-height" => {
+                    output_height = args.next().and_then(|value| value.parse().ok())
+                }
                 "--line" => {
                     if let Some(line) = args.next() {
                         lines.push(line);
@@ -84,10 +90,22 @@ impl CliArgs {
         }
 
         Self {
-            debug_overlay: debug_overlay_from(mode, output_name, lines, rewards),
+            debug_overlay: debug_overlay_from(
+                mode,
+                output_name,
+                output_size(output_width, output_height),
+                lines,
+                rewards,
+            ),
             config_overrides,
         }
     }
+}
+
+fn output_size(width: Option<u32>, height: Option<u32>) -> Option<(u32, u32)> {
+    width
+        .zip(height)
+        .filter(|(width, height)| *width > 0 && *height > 0)
 }
 
 fn set_last_reward_platinum(rewards: &mut [RewardOverlayEntry], platinum: u32) {
@@ -125,6 +143,7 @@ fn parse_bool_arg(value: &str) -> Option<bool> {
 fn debug_overlay_from(
     mode: Option<&'static str>,
     output_name: Option<String>,
+    output_size: Option<(u32, u32)>,
     lines: Vec<String>,
     rewards: Vec<RewardOverlayEntry>,
 ) -> Option<overlay::DebugOverlay> {
@@ -133,6 +152,7 @@ fn debug_overlay_from(
         Some("test") => Some(overlay::DebugOverlay::Test { output_name }),
         Some("rewards") => Some(overlay::DebugOverlay::Rewards {
             output_name,
+            output_size,
             rewards,
         }),
         _ => None,
@@ -180,6 +200,10 @@ mod tests {
                 "--reward-overlay",
                 "--output",
                 "DP-1",
+                "--output-width",
+                "2560",
+                "--output-height",
+                "1440",
                 "--reward-name",
                 "Forma Blueprint",
                 "--reward-platinum",
@@ -208,9 +232,11 @@ mod tests {
         match args.debug_overlay {
             Some(overlay::DebugOverlay::Rewards {
                 output_name,
+                output_size,
                 rewards,
             }) => {
                 assert_eq!(output_name.as_deref(), Some("DP-1"));
+                assert_eq!(output_size, Some((2560, 1440)));
                 assert_eq!(rewards.len(), 2);
                 assert_eq!(rewards[0].name, "Forma Blueprint");
                 assert_eq!(rewards[0].platinum, Some(8));

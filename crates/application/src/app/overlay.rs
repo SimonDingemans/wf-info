@@ -101,6 +101,14 @@ pub(super) fn spawn_reward_overlay(
         command.arg("--output").arg(output_name);
     }
 
+    if let Some((width, height)) = monitor.and_then(|monitor| positive_monitor_size(monitor)) {
+        command
+            .arg("--output-width")
+            .arg(width.to_string())
+            .arg("--output-height")
+            .arg(height.to_string());
+    }
+
     for reward in rewards {
         command.arg("--reward-name").arg(&reward.name);
         append_optional_reward_arg(&mut command, "--reward-platinum", reward.platinum);
@@ -121,6 +129,12 @@ fn append_optional_reward_arg(command: &mut ProcessCommand, name: &str, value: O
     if let Some(value) = value {
         command.arg(name).arg(value.to_string());
     }
+}
+
+fn positive_monitor_size(monitor: &MonitorChoice) -> Option<(u32, u32)> {
+    monitor.info.size.and_then(|(width, height)| {
+        (width > 0 && height > 0).then_some((width as u32, height as u32))
+    })
 }
 
 fn overlay_command() -> Result<ProcessCommand, String> {
