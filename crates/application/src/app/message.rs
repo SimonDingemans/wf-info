@@ -16,6 +16,8 @@ pub(super) enum Message {
     DrawTestOverlay,
     TestOverlayLaunched(Result<u32, String>),
     QuitDebugOverlays,
+    ToggleDiagnostics,
+    ScanNow,
     RefreshDataCache,
     DataCacheRefreshFinished(Result<DataCacheRefresh, String>),
     ClipboardOutputChanged(bool),

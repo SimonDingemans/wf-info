@@ -12,6 +12,16 @@ use super::message::Message;
 use super::state::Application;
 
 impl Application {
+    pub(super) fn trigger_manual_reward_scan(&mut self) -> Task<Message> {
+        if !self.settings.scanner.enabled {
+            self.status =
+                "Reward scanner is disabled. Enable it in settings to scan now.".to_owned();
+            return Task::none();
+        }
+
+        self.trigger_reward_scan(RewardScanTrigger::Manual)
+    }
+
     pub(super) fn trigger_reward_scan(&mut self, trigger: RewardScanTrigger) -> Task<Message> {
         if self.reward_scan_in_progress {
             log::debug!("ignoring reward scan trigger {trigger:?}; scan already in progress");
@@ -22,6 +32,7 @@ impl Application {
         log::debug!("triggering reward scan from {trigger:?}");
         self.reward_scan_in_progress = true;
         self.status = match &trigger {
+            RewardScanTrigger::Manual => "Reward scan started.".to_owned(),
             RewardScanTrigger::Log(detection) => {
                 format!(
                     "Reward screen detected from EE.log marker: {}",
@@ -93,6 +104,7 @@ impl Application {
         clipboard_queued: bool,
     ) {
         self.reward_scan_in_progress = false;
+        self.last_reward_scan = Some(result.clone());
 
         match result {
             Ok(rewards) if rewards.is_empty() => {

@@ -27,6 +27,7 @@ impl Application {
         result: Result<DataCacheRefresh, String>,
     ) {
         self.data_cache_refresh_in_progress = false;
+        self.last_data_cache_refresh = Some(result.clone());
 
         match result {
             Ok(refresh) => {

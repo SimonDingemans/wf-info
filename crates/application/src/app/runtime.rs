@@ -24,7 +24,7 @@ pub fn run(context: &AppContext) -> iced::Result {
 
 impl Application {
     pub(super) fn title(&self) -> String {
-        format!("{} debug shell", self.context.name())
+        self.context.name().to_owned()
     }
 
     pub(super) fn update(&mut self, message: Message) -> Task<Message> {
@@ -87,6 +87,11 @@ impl Application {
                 self.report_closed_debug_overlays(count);
                 Task::none()
             }
+            Message::ToggleDiagnostics => {
+                self.toggle_diagnostics();
+                Task::none()
+            }
+            Message::ScanNow => self.trigger_manual_reward_scan(),
             Message::RefreshDataCache => self.begin_data_cache_refresh(),
             Message::DataCacheRefreshFinished(result) => {
                 self.record_data_cache_refresh_finished(result);

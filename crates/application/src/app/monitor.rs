@@ -81,6 +81,10 @@ impl Application {
     pub(super) fn selected_monitor(&self) -> Option<MonitorChoice> {
         self.selected_monitor.clone()
     }
+
+    pub(super) fn toggle_diagnostics(&mut self) {
+        self.diagnostics_expanded = !self.diagnostics_expanded;
+    }
 }
 
 pub(super) async fn detect_and_show_monitor_info() -> Result<Vec<monitor::MonitorInfo>, String> {

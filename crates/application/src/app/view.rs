@@ -4,6 +4,7 @@ use iced::widget::{
 };
 use iced::{Element, Length};
 use shared::config::Settings as AppSettings;
+use shared::rewards::RewardOverlayEntry;
 
 use super::message::Message;
 use super::monitor::MonitorChoice;
@@ -43,16 +44,10 @@ impl Application {
     }
 
     fn launcher_view(&self) -> Element<'_, Message> {
-        let detect_button = button("Show Monitor Info Overlays")
-            .padding([10, 14])
-            .on_press_maybe((!self.busy).then_some(Message::DetectMonitorInfo));
-
-        let test_overlay_button = button("Draw Test Overlay")
-            .padding([10, 14])
-            .on_press(Message::DrawTestOverlay);
-        let quit_overlays_button = button("Quit Debug Overlays")
-            .padding([10, 14])
-            .on_press(Message::QuitDebugOverlays);
+        let scan_button = button("Scan Now").padding([10, 14]).on_press_maybe(
+            (self.settings.scanner.enabled && !self.reward_scan_in_progress)
+                .then_some(Message::ScanNow),
+        );
         let refresh_data_button = button("Refresh Data Cache")
             .padding([10, 14])
             .on_press_maybe(
@@ -62,59 +57,189 @@ impl Application {
             .padding([10, 14])
             .on_press(Message::OpenSettings);
 
-        let selected = self.selected_monitor.clone();
-        let monitor_picker = pick_list(
-            self.monitors.as_slice(),
-            selected,
-            Message::SelectedMonitorChanged,
-        )
-        .placeholder("Active screen");
-        let clipboard_toggle = checkbox(
-            "Copy reward summaries after scans",
-            self.settings.clipboard.enabled,
-        )
-        .on_toggle(Message::ClipboardOutputChanged);
-
-        let monitor_rows = self
-            .monitors
-            .iter()
-            .fold(column![].spacing(8), |column, monitor| {
-                let details = monitor
-                    .info
-                    .summary_lines()
-                    .into_iter()
-                    .fold(column![].spacing(2), |column, line| column.push(text(line)));
-
-                column.push(container(details).padding(12).width(Length::Fill))
-            });
-
         let content = column![
-            text("wf-info").size(32),
-            text("Basic application shell").size(18),
             row![
-                detect_button,
-                test_overlay_button,
-                quit_overlays_button,
-                refresh_data_button,
-                settings_button
+                column![
+                    text("wf-info").size(32),
+                    text(format!("v{}", env!("CARGO_PKG_VERSION"))).size(16),
+                ]
+                .spacing(2),
+                text(&self.status).size(16),
             ]
-            .spacing(12),
-            row![text("Selected capture/overlay target:"), monitor_picker]
+            .spacing(12)
+            .align_y(iced::Alignment::Center)
+            .width(Length::Fill),
+            row![scan_button, refresh_data_button, settings_button]
                 .spacing(12)
                 .align_y(iced::Alignment::Center),
-            clipboard_toggle,
-            text(&self.status),
-            scrollable(monitor_rows).height(Length::Fill),
+            row![self.readiness_panel(), self.data_cache_panel()]
+                .spacing(16)
+                .width(Length::Fill),
+            self.last_scan_panel(),
+            self.diagnostics_panel(),
         ]
         .spacing(16)
         .padding(24)
-        .width(Length::Fill)
-        .height(Length::Fill);
+        .width(Length::Fill);
 
-        container(content)
+        container(scrollable(content))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    fn readiness_panel(&self) -> Element<'_, Message> {
+        let scanner_state = if self.reward_scan_in_progress {
+            "Scanning"
+        } else if self.settings.scanner.enabled {
+            "Ready"
+        } else {
+            "Disabled"
+        };
+        let log_state = if !self.settings.scanner.enabled {
+            "Disabled"
+        } else if self.settings.warframe.log_path.trim().is_empty() {
+            "Waiting for EE.log path"
+        } else {
+            "Watching EE.log"
+        };
+        let selected_monitor = self
+            .selected_monitor
+            .as_ref()
+            .map(|monitor| monitor.label.clone())
+            .unwrap_or_else(|| "No detected monitor".to_owned());
+
+        dashboard_section(
+            "Scanner Readiness",
+            column![
+                detail_row("Scanner", scanner_state),
+                detail_row("Automatic detection", log_state),
+                detail_row("Activation hotkey", &self.settings.hotkeys.activation),
+                detail_row("Overlay", enabled_label(self.settings.overlay.enabled)),
+                detail_row("Clipboard", enabled_label(self.settings.clipboard.enabled)),
+                detail_row("Capture method", &self.settings.capture.capture_method),
+                detail_row("Configured monitor", &self.settings.capture.monitor),
+                detail_row("Selected monitor", selected_monitor),
+            ],
+        )
+    }
+
+    fn data_cache_panel(&self) -> Element<'_, Message> {
+        let mut rows = column![].spacing(8);
+
+        rows = rows.push(detail_row(
+            "Refresh state",
+            if self.data_cache_refresh_in_progress {
+                "Refreshing"
+            } else {
+                "Idle"
+            },
+        ));
+
+        rows = match &self.last_data_cache_refresh {
+            Some(Ok(refresh)) => rows
+                .push(detail_row("Last result", "Refreshed"))
+                .push(detail_row(
+                    "Prices",
+                    refresh.prices_path.display().to_string(),
+                ))
+                .push(detail_row(
+                    "Filtered items",
+                    refresh.filtered_items_path.display().to_string(),
+                )),
+            Some(Err(err)) => rows
+                .push(detail_row("Last result", "Failed"))
+                .push(text(err).size(14)),
+            None => rows.push(detail_row(
+                "Last result",
+                "No refresh completed this session",
+            )),
+        };
+
+        dashboard_section("Data Cache", rows)
+    }
+
+    fn last_scan_panel(&self) -> Element<'_, Message> {
+        let rows = if self.reward_scan_in_progress {
+            column![text("Reward scan is running.").size(14)].spacing(8)
+        } else {
+            match &self.last_reward_scan {
+                Some(Ok(rewards)) if rewards.is_empty() => {
+                    column![text("Last scan completed, but no rewards were found.").size(14)]
+                        .spacing(8)
+                }
+                Some(Ok(rewards)) => rewards.iter().fold(
+                    column![text(format!("Last scan found {} reward(s).", rewards.len())).size(14)]
+                        .spacing(8),
+                    |column, reward| column.push(reward_row(reward)),
+                ),
+                Some(Err(err)) => {
+                    column![detail_row("Last result", "Failed"), text(err).size(14),].spacing(8)
+                }
+                None => column![text("No reward scan completed this session.").size(14)].spacing(8),
+            }
+        };
+
+        dashboard_section("Last Reward Scan", rows)
+    }
+
+    fn diagnostics_panel(&self) -> Element<'_, Message> {
+        let toggle_label = if self.diagnostics_expanded {
+            "Hide Diagnostics"
+        } else {
+            "Show Diagnostics"
+        };
+        let mut body = column![
+            row![
+                text("Diagnostics").size(20),
+                button(toggle_label)
+                    .padding([8, 12])
+                    .on_press(Message::ToggleDiagnostics),
+            ]
+            .spacing(12)
+            .align_y(iced::Alignment::Center)
+        ]
+        .spacing(12);
+
+        if self.diagnostics_expanded {
+            let detect_button = button("Show Monitor Info Overlays")
+                .padding([10, 14])
+                .on_press_maybe((!self.busy).then_some(Message::DetectMonitorInfo));
+            let test_overlay_button = button("Draw Test Overlay")
+                .padding([10, 14])
+                .on_press(Message::DrawTestOverlay);
+            let quit_overlays_button = button("Quit Debug Overlays")
+                .padding([10, 14])
+                .on_press(Message::QuitDebugOverlays);
+            let selected = self.selected_monitor.clone();
+            let monitor_picker = pick_list(
+                self.monitors.as_slice(),
+                selected,
+                Message::SelectedMonitorChanged,
+            )
+            .placeholder("Active screen");
+            let clipboard_toggle = checkbox(
+                "Copy reward summaries after scans",
+                self.settings.clipboard.enabled,
+            )
+            .on_toggle(Message::ClipboardOutputChanged);
+
+            body = body
+                .push(
+                    row![detect_button, test_overlay_button, quit_overlays_button]
+                        .spacing(12)
+                        .align_y(iced::Alignment::Center),
+                )
+                .push(
+                    row![text("Selected capture/overlay target:"), monitor_picker]
+                        .spacing(12)
+                        .align_y(iced::Alignment::Center),
+                )
+                .push(clipboard_toggle)
+                .push(monitor_details(&self.monitors));
+        }
+
+        container(body).padding(14).width(Length::Fill).into()
     }
 
     fn settings_view(&self) -> Element<'_, Message> {
@@ -159,6 +284,87 @@ impl Application {
             .height(Length::Fill)
             .into()
     }
+}
+
+fn dashboard_section<'a>(
+    title: &'static str,
+    fields: iced::widget::Column<'a, Message>,
+) -> Element<'a, Message> {
+    container(column![text(title).size(20), fields.spacing(8)].spacing(10))
+        .padding(14)
+        .width(Length::Fill)
+        .into()
+}
+
+fn detail_row<'a>(label: &'static str, value: impl Into<String>) -> Element<'a, Message> {
+    row![
+        text(label).size(14).width(Length::Fixed(160.0)),
+        text(value.into()).size(14),
+    ]
+    .spacing(8)
+    .align_y(iced::Alignment::Center)
+    .into()
+}
+
+fn enabled_label(enabled: bool) -> &'static str {
+    if enabled { "Enabled" } else { "Disabled" }
+}
+
+fn reward_row<'a>(reward: &RewardOverlayEntry) -> Element<'a, Message> {
+    let mut metrics = Vec::new();
+
+    if let Some(platinum) = reward.platinum {
+        metrics.push(format!("{platinum}p"));
+    }
+    if let Some(ducats) = reward.ducats {
+        metrics.push(format!("{ducats} ducats"));
+    }
+    if let Some(volume) = reward.volume {
+        metrics.push(format!("{volume} volume"));
+    }
+    if reward.vaulted {
+        metrics.push("vaulted".to_owned());
+    }
+    if reward.mastered {
+        metrics.push("mastered".to_owned());
+    }
+    if let (Some(owned), Some(required)) = (reward.owned_count, reward.required_count) {
+        metrics.push(format!("{owned}/{required} owned"));
+    }
+
+    let summary = if metrics.is_empty() {
+        "No market data".to_owned()
+    } else {
+        metrics.join(" / ")
+    };
+
+    row![
+        text(reward.name.clone())
+            .size(14)
+            .width(Length::FillPortion(2)),
+        text(summary).size(14).width(Length::FillPortion(3)),
+    ]
+    .spacing(12)
+    .align_y(iced::Alignment::Center)
+    .into()
+}
+
+fn monitor_details<'a>(monitors: &'a [MonitorChoice]) -> Element<'a, Message> {
+    if monitors.is_empty() {
+        return text("No monitor information detected.").size(14).into();
+    }
+
+    monitors
+        .iter()
+        .fold(column![].spacing(10), |column, monitor| {
+            let details = monitor.info.summary_lines().into_iter().fold(
+                column![text(monitor.label.clone()).size(16)].spacing(2),
+                |column, line| column.push(text(line).size(14)),
+            );
+
+            column.push(details)
+        })
+        .into()
 }
 
 fn settings_tab_view<'a>(

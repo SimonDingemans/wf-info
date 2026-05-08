@@ -259,6 +259,87 @@ fn startup_monitor_detection_populates_choices_without_launching_overlays() {
     assert_eq!(application.status, "Detected 2 connected monitor(s).");
 }
 
+#[test]
+fn application_title_uses_app_name_without_debug_shell_suffix() {
+    let application = Application::new(test_context());
+
+    assert_eq!(application.title(), "wf-info-test");
+}
+
+#[test]
+fn manual_scan_sets_in_progress_state() {
+    let mut application = Application::new(test_context());
+
+    let _ = application.trigger_manual_reward_scan();
+
+    assert!(application.reward_scan_in_progress);
+    assert_eq!(application.status, "Reward scan started.");
+    assert!(application.last_reward_scan.is_none());
+}
+
+#[test]
+fn disabled_scanner_prevents_manual_scan() {
+    let mut application = Application::new(test_context());
+    application.settings.scanner.enabled = false;
+
+    let _ = application.trigger_manual_reward_scan();
+
+    assert!(!application.reward_scan_in_progress);
+    assert_eq!(
+        application.status,
+        "Reward scanner is disabled. Enable it in settings to scan now."
+    );
+    assert!(application.last_reward_scan.is_none());
+}
+
+#[test]
+fn reward_scan_completion_records_last_scan_result() {
+    let mut application = Application::new(test_context());
+    let rewards = vec![RewardOverlayEntry::name_only("Forma Blueprint").with_platinum(12)];
+
+    application.record_reward_scan_finished(Ok(rewards.clone()), None, false);
+
+    assert_eq!(application.last_reward_scan, Some(Ok(rewards)));
+
+    application.record_reward_scan_finished(Err("ocr failed".to_owned()), None, false);
+
+    assert_eq!(
+        application.last_reward_scan,
+        Some(Err("ocr failed".to_owned()))
+    );
+}
+
+#[test]
+fn data_cache_refresh_completion_records_last_result() {
+    let mut application = Application::new(test_context());
+    let refresh = DataCacheRefresh {
+        prices_path: "/tmp/wf-info/prices.json".into(),
+        filtered_items_path: "/tmp/wf-info/filtered_items.json".into(),
+    };
+
+    application.record_data_cache_refresh_finished(Ok(refresh.clone()));
+
+    assert_eq!(application.last_data_cache_refresh, Some(Ok(refresh)));
+
+    application.record_data_cache_refresh_finished(Err("offline".to_owned()));
+
+    assert_eq!(
+        application.last_data_cache_refresh,
+        Some(Err("offline".to_owned()))
+    );
+}
+
+#[test]
+fn diagnostics_toggle_changes_expanded_state() {
+    let mut application = Application::new(test_context());
+
+    application.toggle_diagnostics();
+    assert!(application.diagnostics_expanded);
+
+    application.toggle_diagnostics();
+    assert!(!application.diagnostics_expanded);
+}
+
 fn test_context() -> AppContext {
     static NEXT_CONFIG_ID: AtomicUsize = AtomicUsize::new(0);
     let id = NEXT_CONFIG_ID.fetch_add(1, Ordering::Relaxed);

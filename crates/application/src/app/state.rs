@@ -1,5 +1,8 @@
 use shared::AppContext;
 use shared::config::Settings as AppSettings;
+use shared::rewards::RewardOverlayEntry;
+
+use crate::data_cache::DataCacheRefresh;
 
 use super::monitor::MonitorChoice;
 use super::settings::{HotkeyCaptureTarget, Page, SettingsTab};
@@ -15,6 +18,9 @@ pub(super) struct Application {
     pub(super) busy: bool,
     pub(super) data_cache_refresh_in_progress: bool,
     pub(super) reward_scan_in_progress: bool,
+    pub(super) diagnostics_expanded: bool,
+    pub(super) last_data_cache_refresh: Option<Result<DataCacheRefresh, String>>,
+    pub(super) last_reward_scan: Option<Result<Vec<RewardOverlayEntry>, String>>,
     pub(super) page: Page,
     pub(super) settings_tab: SettingsTab,
     pub(super) settings_draft: AppSettings,
@@ -26,8 +32,7 @@ impl Application {
         let (settings, status) = match context.load_settings() {
             Ok(settings) => (
                 settings,
-                "Ready. Use the debug buttons to query monitor streams or draw overlays."
-                    .to_owned(),
+                "Ready. Reward scanner dashboard initialized.".to_owned(),
             ),
             Err(err) => {
                 log::warn!("failed to load settings, using defaults: {err}");
@@ -50,6 +55,9 @@ impl Application {
             busy: false,
             data_cache_refresh_in_progress: false,
             reward_scan_in_progress: false,
+            diagnostics_expanded: false,
+            last_data_cache_refresh: None,
+            last_reward_scan: None,
             page: Page::Launcher,
             settings_tab: SettingsTab::App,
             settings_draft,

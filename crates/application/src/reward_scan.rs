@@ -19,6 +19,7 @@ use shared::watchers::log_watcher::RewardScreenDetection;
 
 #[derive(Clone, Debug)]
 pub(crate) enum RewardScanTrigger {
+    Manual,
     Log(RewardScreenDetection),
     Hotkey(String),
 }
@@ -212,6 +213,7 @@ fn is_reward_debug_capture(path: &Path) -> bool {
 
 fn debug_capture_trigger_label(trigger: &RewardScanTrigger) -> &'static str {
     match trigger {
+        RewardScanTrigger::Manual => "manual",
         RewardScanTrigger::Log(_) => "log",
         RewardScanTrigger::Hotkey(_) => "hotkey",
     }
