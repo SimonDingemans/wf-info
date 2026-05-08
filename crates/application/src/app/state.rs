@@ -2,6 +2,7 @@ use shared::AppContext;
 use shared::config::Settings as AppSettings;
 
 use super::monitor::MonitorChoice;
+use super::settings::{Page, SettingsTab};
 
 #[derive(Debug)]
 pub(super) struct Application {
@@ -14,6 +15,9 @@ pub(super) struct Application {
     pub(super) busy: bool,
     pub(super) data_cache_refresh_in_progress: bool,
     pub(super) reward_scan_in_progress: bool,
+    pub(super) page: Page,
+    pub(super) settings_tab: SettingsTab,
+    pub(super) settings_draft: AppSettings,
 }
 
 impl Application {
@@ -33,6 +37,8 @@ impl Application {
             }
         };
 
+        let settings_draft = settings.clone();
+
         Self {
             context,
             settings,
@@ -43,6 +49,9 @@ impl Application {
             busy: false,
             data_cache_refresh_in_progress: false,
             reward_scan_in_progress: false,
+            page: Page::Launcher,
+            settings_tab: SettingsTab::App,
+            settings_draft,
         }
     }
 }

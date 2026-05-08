@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::data_cache::DataCacheRefresh;
 
 use super::monitor::monitor_choices;
+use super::settings::{Page, SettingsTab};
 use super::state::Application;
 
 #[test]
@@ -124,6 +125,56 @@ fn clipboard_output_setting_is_persisted() {
 
     let saved = application.context.load_settings().expect("saved settings");
     assert!(saved.clipboard.enabled);
+}
+
+#[test]
+fn settings_page_save_persists_draft_and_returns_to_launcher() {
+    let mut application = Application::new(test_context());
+
+    application.open_settings_page();
+    application.set_settings_app_locale("nl".to_owned());
+    application.set_settings_clipboard_enabled(true);
+    application.save_settings_page();
+
+    assert_eq!(application.page, Page::Launcher);
+    assert_eq!(application.status, "Settings saved.");
+    assert_eq!(application.settings.app.locale, "nl");
+    assert!(application.settings.clipboard.enabled);
+
+    let saved = application.context.load_settings().expect("saved settings");
+    assert_eq!(saved.app.locale, "nl");
+    assert!(saved.clipboard.enabled);
+}
+
+#[test]
+fn settings_page_cancel_discards_draft_changes() {
+    let mut application = Application::new(test_context());
+
+    application.open_settings_page();
+    application.set_settings_app_locale("nl".to_owned());
+    application.cancel_settings_page();
+
+    assert_eq!(application.page, Page::Launcher);
+    assert_eq!(application.status, "Settings changes cancelled.");
+    assert_eq!(application.settings.app.locale, "en");
+    assert_eq!(application.settings_draft.app.locale, "en");
+}
+
+#[test]
+fn settings_page_rejects_unsupported_capture_values() {
+    let mut application = Application::new(test_context());
+
+    application.open_settings_page();
+    application.set_settings_display_mode("windowed".to_owned());
+    application.save_settings_page();
+
+    assert_eq!(application.page, Page::Settings);
+    assert_eq!(application.settings_tab, SettingsTab::Capture);
+    assert!(application.status.contains("borderless_fullscreen"));
+    assert_eq!(
+        application.settings.capture.display_mode,
+        "borderless_fullscreen"
+    );
 }
 
 #[test]

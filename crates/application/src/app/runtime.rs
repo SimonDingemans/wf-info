@@ -94,6 +94,130 @@ impl Application {
                 self.set_clipboard_output_enabled(enabled);
                 Task::none()
             }
+            Message::OpenSettings => {
+                self.open_settings_page();
+                Task::none()
+            }
+            Message::CancelSettings => {
+                self.cancel_settings_page();
+                Task::none()
+            }
+            Message::SaveSettings => {
+                self.save_settings_page();
+                Task::none()
+            }
+            Message::SettingsTabSelected(tab) => {
+                self.select_settings_tab(tab);
+                Task::none()
+            }
+            Message::SettingsAppLocaleChanged(value) => {
+                self.set_settings_app_locale(value);
+                Task::none()
+            }
+            Message::SettingsAppStartMinimizedChanged(value) => {
+                self.set_settings_app_start_minimized(value);
+                Task::none()
+            }
+            Message::SettingsCaptureMonitorChanged(value) => {
+                self.set_settings_capture_monitor(value);
+                Task::none()
+            }
+            Message::SettingsCaptureMethodChanged(value) => {
+                self.set_settings_capture_method(value);
+                Task::none()
+            }
+            Message::SettingsDisplayModeChanged(value) => {
+                self.set_settings_display_mode(value);
+                Task::none()
+            }
+            Message::SettingsAspectRatioChanged(value) => {
+                self.set_settings_aspect_ratio(value);
+                Task::none()
+            }
+            Message::SettingsScannerEnabledChanged(value) => {
+                self.set_settings_scanner_enabled(value);
+                Task::none()
+            }
+            Message::SettingsScannerAutoDelayChanged(value) => {
+                self.set_settings_scanner_auto_delay(value);
+                Task::none()
+            }
+            Message::SettingsScannerDebugImagesChanged(value) => {
+                self.set_settings_scanner_debug_images(value);
+                Task::none()
+            }
+            Message::SettingsScannerRetentionChanged(value) => {
+                self.set_settings_scanner_retention(value);
+                Task::none()
+            }
+            Message::SettingsActivationHotkeyChanged(value) => {
+                self.set_settings_activation_hotkey(value);
+                Task::none()
+            }
+            Message::SettingsDismissOverlayHotkeyChanged(value) => {
+                self.set_settings_dismiss_overlay_hotkey(value);
+                Task::none()
+            }
+            Message::SettingsOverlayEnabledChanged(value) => {
+                self.set_settings_overlay_enabled(value);
+                Task::none()
+            }
+            Message::SettingsOverlayXOffsetChanged(value) => {
+                self.set_settings_overlay_x_offset(value);
+                Task::none()
+            }
+            Message::SettingsOverlayYOffsetChanged(value) => {
+                self.set_settings_overlay_y_offset(value);
+                Task::none()
+            }
+            Message::SettingsOverlayDurationChanged(value) => {
+                self.set_settings_overlay_duration(value);
+                Task::none()
+            }
+            Message::SettingsOverlayHighContrastChanged(value) => {
+                self.set_settings_overlay_high_contrast(value);
+                Task::none()
+            }
+            Message::SettingsClipboardEnabledChanged(value) => {
+                self.set_settings_clipboard_enabled(value);
+                Task::none()
+            }
+            Message::SettingsClipboardVaultedMarkerChanged(value) => {
+                self.set_settings_clipboard_vaulted_marker(value);
+                Task::none()
+            }
+            Message::SettingsClipboardFooterChanged(value) => {
+                self.set_settings_clipboard_footer(value);
+                Task::none()
+            }
+            Message::SettingsOcrLanguageChanged(value) => {
+                self.set_settings_ocr_language(value);
+                Task::none()
+            }
+            Message::SettingsTesseractDataPathChanged(value) => {
+                self.set_settings_tesseract_data_path(value);
+                Task::none()
+            }
+            Message::SettingsOcrConfidenceChanged(value) => {
+                self.set_settings_ocr_confidence(value);
+                Task::none()
+            }
+            Message::SettingsWarframeLogPathChanged(value) => {
+                self.set_settings_warframe_log_path(value);
+                Task::none()
+            }
+            Message::SettingsWarframeUiThemeChanged(value) => {
+                self.set_settings_warframe_ui_theme(value);
+                Task::none()
+            }
+            Message::SettingsLoggingLevelChanged(value) => {
+                self.set_settings_logging_level(value);
+                Task::none()
+            }
+            Message::SettingsLoggingFileChanged(value) => {
+                self.set_settings_logging_file(value);
+                Task::none()
+            }
             Message::ServiceEvent(event) => self.handle_service_event(event),
             Message::RewardScanFinished(result) => {
                 let overlay_result = result

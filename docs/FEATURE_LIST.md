@@ -16,7 +16,7 @@ Checklist status: checked items have a concrete implementation in the current Ru
   - current app version
   - [x] current data load state
   - [x] reload/force-update data action
-  - settings entry point
+  - [x] settings entry point
   - relic browser entry point
   - equipment browser entry point
   - exit/minimize behavior
@@ -119,7 +119,7 @@ Wayland note: global hotkeys, pointer tracking, screenshots, and click-through o
   - HDR handling preference
   - [x] configured Warframe UI theme
   - ignored item list
-- Provide a settings window with tabs for each config section.
+- [x] Provide a settings page with tabs for each config section.
 - Validate settings on load and repair invalid hotkey names to defaults.
 - Keep settings backward-compatible within the Rust app once released.
 
