@@ -1,4 +1,5 @@
-use iced::widget::{button, column, container, horizontal_rule, row, text};
+use iced::widget::image::Handle as ImageHandle;
+use iced::widget::{button, column, container, horizontal_rule, image, row, text};
 use iced::{
     Color, Element, Font, Length, Pixels, Renderer, Subscription, Task as Command, Theme, time,
 };
@@ -19,6 +20,8 @@ const REWARD_OVERLAY_PADDING: u32 = 18;
 const REWARD_OVERLAY_Y_RATIO: f32 = 0.62;
 const MONITOR_INFO_WIDTH: u32 = 520;
 const MONITOR_INFO_HEIGHT: u32 = 260;
+const PLATINUM_ICON: &[u8] = include_bytes!("../assets/src/PlatinumLarge.png");
+const DUCAT_ICON: &[u8] = include_bytes!("../assets/src/OrokinDucats.png");
 
 pub enum DebugOverlay {
     MonitorInfo {
@@ -362,16 +365,20 @@ fn reward_card(
 ) -> Element<'_, Message, Theme, Renderer> {
     let details = column![
         text(&reward.name).size(16).width(Length::Fill),
-        reward_detail("Platinum", reward.platinum),
-        reward_detail("Ducats", reward.ducats),
-        reward_detail("Volume", reward.volume),
-        text(format!(
-            "Vaulted: {}",
-            if reward.vaulted { "Yes" } else { "No" }
-        ))
-        .size(14),
+        reward_value_with_icon(reward.platinum, ImageHandle::from_bytes(PLATINUM_ICON)),
+        reward_value_with_icon(reward.ducats, ImageHandle::from_bytes(DUCAT_ICON)),
+        reward_detail("Sold last 48 hours", reward.volume),
     ]
     .spacing(4);
+    let details = if reward.vaulted {
+        details.push(
+            text("Vaulted")
+                .size(14)
+                .color(Color::from_rgb(0.85, 0.78, 0.56)),
+        )
+    } else {
+        details
+    };
 
     let border_color = if is_best_platinum {
         Color::from_rgb(1.0, 0.84, 0.0)
@@ -408,6 +415,24 @@ fn reward_detail(
             .unwrap_or_else(|| "Unknown".to_owned())
     ))
     .size(14)
+    .into()
+}
+
+fn reward_value_with_icon(
+    value: Option<u32>,
+    icon: ImageHandle,
+) -> Element<'static, Message, Theme, Renderer> {
+    row![
+        image(icon).width(18).height(18),
+        text(
+            value
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "Unknown".to_owned())
+        )
+        .size(14)
+    ]
+    .spacing(6)
+    .align_y(iced::Alignment::Center)
     .into()
 }
 

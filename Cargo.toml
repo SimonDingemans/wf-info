@@ -21,7 +21,7 @@ ashpd = { version = "0.13", default-features = false, features = ["async-io", "g
 async-io = "2"
 env_logger = "0.11"
 futures-util = "0.3"
-iced = { version = "0.13", features = ["tokio"] }
+iced = { version = "0.13", features = ["tokio", "image"] }
 iced_layershell = "0.13"
 image = "0.25"
 kreuzberg-tesseract = "4.9"
