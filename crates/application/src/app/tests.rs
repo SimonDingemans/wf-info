@@ -1,4 +1,12 @@
-use shared::{AppContext, monitor::MonitorInfo, rewards::RewardOverlayEntry};
+use shared::{
+    AppContext,
+    monitor::MonitorInfo,
+    rewards::RewardOverlayEntry,
+    watchers::{
+        events::ServiceEvent,
+        log_watcher::{LogFileSelection, LogFileSelectionSource, LogWatcherEvent},
+    },
+};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::data_cache::DataCacheRefresh;
@@ -338,6 +346,20 @@ fn diagnostics_toggle_changes_expanded_state() {
 
     application.toggle_diagnostics();
     assert!(!application.diagnostics_expanded);
+}
+
+#[test]
+fn log_watcher_selection_updates_application_status() {
+    let mut application = Application::new(test_context());
+
+    let _ = application.handle_service_event(ServiceEvent::LogWatcher(
+        LogWatcherEvent::LogFileSelected(LogFileSelection {
+            path: "/tmp/EE.log".into(),
+            source: LogFileSelectionSource::Discovered,
+        }),
+    ));
+
+    assert_eq!(application.status, "Discovered Warframe log: /tmp/EE.log");
 }
 
 fn test_context() -> AppContext {

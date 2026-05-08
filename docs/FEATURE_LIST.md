@@ -312,7 +312,7 @@ Wayland/Linux note: automatic detection should read Warframe logs directly, like
 - [x] Basic extensible application UI
 - [x] Settings persistence
 - Data download/cache/fallback
-- Warframe log discovery/tailing
+- [x] Warframe log discovery/tailing
 - [x] Automatic end-of-mission reward detection from logs
 - [x] Screenshot capture
 - [x] OCR reward processing for end-of-mission rewards

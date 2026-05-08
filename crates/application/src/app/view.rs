@@ -99,7 +99,7 @@ impl Application {
         let log_state = if !self.settings.scanner.enabled {
             "Disabled"
         } else if self.settings.warframe.log_path.trim().is_empty() {
-            "Waiting for EE.log path"
+            "Discovering EE.log"
         } else {
             "Watching EE.log"
         };
@@ -571,7 +571,7 @@ fn settings_tab_view<'a>(
             column![
                 text_field(
                     "EE.log path",
-                    "Optional explicit Warframe EE.log path for automatic reward detection.",
+                    "Optional explicit Warframe EE.log path; leave empty to auto-discover Steam/Proton locations.",
                     &settings.warframe.log_path,
                     Message::SettingsWarframeLogPathChanged
                 ),

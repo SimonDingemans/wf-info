@@ -16,17 +16,16 @@ pub fn log_watcher_subscription(settings: &Settings) -> Subscription<ServiceEven
         return Subscription::none();
     }
 
-    if settings.warframe.log_path.trim().is_empty() {
-        log::debug!("log watcher subscription disabled because warframe.log_path is empty");
-        return Subscription::none();
-    }
-
     let config = LogWatcherConfig::for_settings(settings);
     let capture_delay = Duration::from_millis(settings.scanner.auto_delay_ms);
+    let log_source = if config.path.as_os_str().is_empty() {
+        "auto-discovery".to_owned()
+    } else {
+        config.path.display().to_string()
+    };
     let id = format!(
         "log-watcher:{}:{}",
-        config.path.display(),
-        settings.scanner.auto_delay_ms
+        log_source, settings.scanner.auto_delay_ms
     );
 
     watcher_subscription(

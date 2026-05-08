@@ -1,7 +1,7 @@
 use iced::Task;
 use shared::watchers::events::{ServiceEvent, WatcherEvent, WatcherKind};
 use shared::watchers::hotkey_watcher::{HotkeyAction, HotkeyEvent};
-use shared::watchers::log_watcher::LogWatcherEvent;
+use shared::watchers::log_watcher::{LogFileSelectionSource, LogWatcherEvent};
 
 use crate::reward_scan::RewardScanTrigger;
 
@@ -13,6 +13,17 @@ impl Application {
         log::debug!("application received watcher service event: {event:?}");
 
         match event {
+            ServiceEvent::LogWatcher(LogWatcherEvent::LogFileSelected(selection)) => {
+                self.status = match selection.source {
+                    LogFileSelectionSource::Configured => {
+                        format!("Watching Warframe log: {}", selection.path.display())
+                    }
+                    LogFileSelectionSource::Discovered => {
+                        format!("Discovered Warframe log: {}", selection.path.display())
+                    }
+                };
+                Task::none()
+            }
             ServiceEvent::LogWatcher(LogWatcherEvent::RewardScreenDetected(detection)) => {
                 self.trigger_reward_scan(RewardScanTrigger::Log(detection))
             }
