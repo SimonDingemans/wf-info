@@ -7,5 +7,8 @@ pub use scanner::{
     RewardNameCandidate, RewardNamePreprocessor, RewardNameRegionDetector, RewardScreenScanner,
     normalize_reward_ocr_text,
 };
-pub use service::{scan_reward_screen_frame, scan_reward_screen_frame_with_debug_images};
+pub use service::{
+    clear_cached_reward_screen_scanner, scan_reward_screen_frame,
+    scan_reward_screen_frame_with_debug_images,
+};
 pub use theme::RewardUiTheme;

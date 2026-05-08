@@ -106,4 +106,8 @@ blast radius calls for it:
 - targeted tests when available
 - `cargo test` for shared behavior or cross-crate changes
 
+Benchmark tests, including `cargo bench`, may not be run without explicit user
+permission. When benchmarks are run, configure them for 50 runs unless the user
+asks for a different count.
+
 If a check cannot be run, explain why in the final response.

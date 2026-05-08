@@ -41,6 +41,15 @@ pub fn scan_reward_screen_frame_with_debug_images(
     scanner.scan(frame)
 }
 
+pub fn clear_cached_reward_screen_scanner() -> Result<()> {
+    let mut cache = reward_scanner_cache()
+        .lock()
+        .map_err(|err| crate::OcrError::Processing(format!("could not lock OCR scanner: {err}")))?;
+
+    *cache = None;
+    Ok(())
+}
+
 fn scan_with_cached_scanner(
     frame: &CapturedFrame,
     theme: RewardUiTheme,

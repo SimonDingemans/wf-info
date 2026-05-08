@@ -10,3 +10,7 @@ image.workspace = true
 kreuzberg-tesseract.workspace = true
 log.workspace = true
 thiserror.workspace = true
+
+[[bench]]
+name = "reward_recognition"
+harness = false
