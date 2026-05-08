@@ -8,4 +8,5 @@ iced.workspace = true
 log.workspace = true
 ocr.workspace = true
 reqwest.workspace = true
+serde_json.workspace = true
 shared.workspace = true

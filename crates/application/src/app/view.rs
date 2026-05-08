@@ -137,16 +137,23 @@ impl Application {
         ));
 
         rows = match &self.last_data_cache_refresh {
-            Some(Ok(refresh)) => rows
-                .push(detail_row("Last result", "Refreshed"))
-                .push(detail_row(
-                    "Prices",
-                    refresh.prices_path.display().to_string(),
-                ))
-                .push(detail_row(
-                    "Filtered items",
-                    refresh.filtered_items_path.display().to_string(),
-                )),
+            Some(Ok(refresh)) => refresh.payloads().into_iter().fold(
+                rows.push(detail_row("Last result", "Refreshed"))
+                    .push(detail_row(
+                        "Remote payloads",
+                        refresh.remote_count().to_string(),
+                    ))
+                    .push(detail_row(
+                        "Local fallbacks",
+                        refresh.local_fallback_count().to_string(),
+                    )),
+                |rows, (label, payload)| {
+                    rows.push(detail_row(
+                        format!("{label} ({})", payload.source.label()),
+                        payload.path.display().to_string(),
+                    ))
+                },
+            ),
             Some(Err(err)) => rows
                 .push(detail_row("Last result", "Failed"))
                 .push(text(err).size(14)),
@@ -296,9 +303,9 @@ fn dashboard_section<'a>(
         .into()
 }
 
-fn detail_row<'a>(label: &'static str, value: impl Into<String>) -> Element<'a, Message> {
+fn detail_row<'a>(label: impl Into<String>, value: impl Into<String>) -> Element<'a, Message> {
     row![
-        text(label).size(14).width(Length::Fixed(160.0)),
+        text(label.into()).size(14).width(Length::Fixed(160.0)),
         text(value.into()).size(14),
     ]
     .spacing(8)

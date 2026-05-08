@@ -10,6 +10,7 @@ pub type Result<T> = std::result::Result<T, ItemDatabaseError>;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ItemDatabase {
     items: Vec<Item>,
+    market_items: Vec<MarketItem>,
 }
 
 impl ItemDatabase {
@@ -34,13 +35,46 @@ impl ItemDatabase {
         Self::from_json(&prices, &filtered_items)
     }
 
+    pub fn from_files_with_market_items(
+        prices_path: impl AsRef<Path>,
+        filtered_items_path: impl AsRef<Path>,
+        market_items_path: impl AsRef<Path>,
+    ) -> Result<Self> {
+        let prices_path = prices_path.as_ref();
+        let filtered_items_path = filtered_items_path.as_ref();
+        let market_items_path = market_items_path.as_ref();
+        let prices =
+            fs::read_to_string(prices_path).map_err(|source| ItemDatabaseError::ReadFile {
+                path: prices_path.to_path_buf(),
+                source,
+            })?;
+        let filtered_items = fs::read_to_string(filtered_items_path).map_err(|source| {
+            ItemDatabaseError::ReadFile {
+                path: filtered_items_path.to_path_buf(),
+                source,
+            }
+        })?;
+        let market_items = fs::read_to_string(market_items_path).map_err(|source| {
+            ItemDatabaseError::ReadFile {
+                path: market_items_path.to_path_buf(),
+                source,
+            }
+        })?;
+
+        Self::from_json_with_market_items(&prices, &filtered_items, &market_items)
+    }
+
     pub fn from_cache_dir(cache_dir: impl AsRef<Path>) -> Result<Self> {
         let cache_dir = cache_dir.as_ref();
+        let prices_path = cache_dir.join("prices.json");
+        let filtered_items_path = cache_dir.join("filtered_items.json");
+        let market_items_path = cache_dir.join("warframe_market_items.json");
 
-        Self::from_files(
-            cache_dir.join("prices.json"),
-            cache_dir.join("filtered_items.json"),
-        )
+        if market_items_path.exists() {
+            Self::from_files_with_market_items(prices_path, filtered_items_path, market_items_path)
+        } else {
+            Self::from_files(prices_path, filtered_items_path)
+        }
     }
 
     pub fn from_json(prices: &str, filtered_items: &str) -> Result<Self> {
@@ -54,15 +88,43 @@ impl ItemDatabase {
 
         apply_special_price_overrides(&mut items);
 
-        Ok(Self { items })
+        Ok(Self {
+            items,
+            market_items: Vec::new(),
+        })
+    }
+
+    pub fn from_json_with_market_items(
+        prices: &str,
+        filtered_items: &str,
+        market_items: &str,
+    ) -> Result<Self> {
+        let mut database = Self::from_json(prices, filtered_items)?;
+        database.market_items = load_market_items(market_items)?;
+        database.apply_market_item_slugs();
+
+        Ok(database)
     }
 
     pub fn new(items: Vec<Item>) -> Self {
-        Self { items }
+        Self {
+            items,
+            market_items: Vec::new(),
+        }
     }
 
     pub fn items(&self) -> &[Item] {
         &self.items
+    }
+
+    pub fn market_items(&self) -> &[MarketItem] {
+        &self.market_items
+    }
+
+    pub fn find_market_item(&self, name: &str) -> Option<&MarketItem> {
+        self.market_items.iter().find(|item| {
+            item.name == name || item.localized_names.values().any(|value| value == name)
+        })
     }
 
     pub fn len(&self) -> usize {
@@ -90,12 +152,28 @@ impl ItemDatabase {
             .min_by_key(|(_, distance)| *distance)
             .map(|(item, _)| item)
     }
+
+    fn apply_market_item_slugs(&mut self) {
+        let slugs_by_name = self
+            .market_items
+            .iter()
+            .map(|item| (item.name.clone(), item.slug.clone()))
+            .collect::<HashMap<_, _>>();
+
+        for item in &mut self.items {
+            item.market_slug = slugs_by_name
+                .get(&item.drop_name)
+                .or_else(|| slugs_by_name.get(&item.name))
+                .cloned();
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Item {
     pub name: String,
     pub drop_name: String,
+    pub market_slug: Option<String>,
     pub platinum: f32,
     pub ducats: u32,
     pub volume: u32,
@@ -116,6 +194,13 @@ impl Item {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MarketItem {
+    pub slug: String,
+    pub name: String,
+    pub localized_names: HashMap<String, String>,
+}
+
 #[derive(Debug, Error)]
 pub enum ItemDatabaseError {
     #[error("could not read item database file {path}: {source}")]
@@ -127,6 +212,10 @@ pub enum ItemDatabaseError {
     PricesJson(serde_json::Error),
     #[error("could not parse filtered items payload: {0}")]
     FilteredItemsJson(serde_json::Error),
+    #[error("could not parse warframe.market items payload: {0}")]
+    MarketItemsJson(serde_json::Error),
+    #[error("warframe.market items payload did not contain a usable English name for slug {0}")]
+    MissingMarketItemName(String),
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -185,6 +274,24 @@ struct FilteredItems {
     ignored_items: HashMap<String, DucatItem>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct MarketItemsPayload {
+    #[serde(default)]
+    data: Vec<MarketItemPayload>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct MarketItemPayload {
+    slug: String,
+    #[serde(default)]
+    i18n: HashMap<String, MarketItemTranslation>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct MarketItemTranslation {
+    name: String,
+}
+
 fn load_prices(prices: &str) -> Result<HashMap<String, PriceItem>> {
     let prices: Vec<PriceItem> =
         serde_json::from_str(prices).map_err(ItemDatabaseError::PricesJson)?;
@@ -197,6 +304,34 @@ fn load_prices(prices: &str) -> Result<HashMap<String, PriceItem>> {
 
 fn load_filtered_items(filtered_items: &str) -> Result<FilteredItems> {
     serde_json::from_str(filtered_items).map_err(ItemDatabaseError::FilteredItemsJson)
+}
+
+fn load_market_items(market_items: &str) -> Result<Vec<MarketItem>> {
+    let payload: MarketItemsPayload =
+        serde_json::from_str(market_items).map_err(ItemDatabaseError::MarketItemsJson)?;
+
+    payload
+        .data
+        .into_iter()
+        .map(|item| {
+            let localized_names = item
+                .i18n
+                .into_iter()
+                .map(|(language, translation)| (language, translation.name))
+                .collect::<HashMap<_, _>>();
+            let name = localized_names
+                .get("en")
+                .or_else(|| localized_names.values().next())
+                .cloned()
+                .ok_or_else(|| ItemDatabaseError::MissingMarketItemName(item.slug.clone()))?;
+
+            Ok(MarketItem {
+                slug: item.slug,
+                name,
+                localized_names,
+            })
+        })
+        .collect()
 }
 
 fn process_items(
@@ -229,6 +364,7 @@ fn process_items(
             Item {
                 name: name.clone(),
                 drop_name: name,
+                market_slug: None,
                 platinum: price.map(|price| price.custom_avg).unwrap_or_default(),
                 ducats: ducat_item.ducats,
                 volume: price.map(total_recent_volume).unwrap_or_default(),
@@ -253,6 +389,7 @@ fn set_item(
     price.map(|price| Item {
         name: set_name.clone(),
         drop_name: set_name,
+        market_slug: None,
         platinum: price.custom_avg,
         ducats: 0,
         volume: total_recent_volume(price),
@@ -280,6 +417,7 @@ fn equipment_part_item(
     Some(Item {
         drop_name: drop_name_for_part(&name, equipment_type),
         name,
+        market_slug: None,
         platinum: price.custom_avg,
         ducats: ducat_item.ducats,
         volume: total_recent_volume(price),
@@ -452,6 +590,31 @@ mod tests {
     }
 
     #[test]
+    fn database_loads_market_item_names_slugs_and_translations() {
+        let database = ItemDatabase::from_json_with_market_items(
+            prices_json(),
+            filtered_items_json(),
+            market_items_json(),
+        )
+        .expect("database");
+
+        assert_eq!(database.market_items().len(), 2);
+        let ash_systems = database
+            .find_item("Ash Prime Systems Blueprint", None)
+            .expect("warframe systems part");
+        assert_eq!(
+            ash_systems.market_slug.as_deref(),
+            Some("ash_prime_systems_blueprint")
+        );
+
+        let market_item = database
+            .find_market_item("Plan de Systemes d'Ash Prime")
+            .expect("localized market item");
+        assert_eq!(market_item.slug, "ash_prime_systems_blueprint");
+        assert_eq!(market_item.name, "Ash Prime Systems Blueprint");
+    }
+
+    #[test]
     fn levenshtein_distance_handles_insertions_deletions_and_substitutions() {
         assert_eq!(levenshtein_distance("kitten", "sitting"), 3);
     }
@@ -500,6 +663,26 @@ mod tests {
             "ignored_items": {
                 "Forma Blueprint": { "ducats": 0 }
             }
+        }"#
+    }
+
+    fn market_items_json() -> &'static str {
+        r#"{
+            "data": [
+                {
+                    "slug": "ash_prime_systems_blueprint",
+                    "i18n": {
+                        "en": { "name": "Ash Prime Systems Blueprint" },
+                        "fr": { "name": "Plan de Systemes d'Ash Prime" }
+                    }
+                },
+                {
+                    "slug": "ash_prime_set",
+                    "i18n": {
+                        "en": { "name": "Ash Prime Set" }
+                    }
+                }
+            ]
         }"#
     }
 }

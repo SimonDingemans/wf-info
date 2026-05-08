@@ -9,7 +9,7 @@ use shared::{
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::data_cache::DataCacheRefresh;
+use crate::data_cache::{DataCacheRefresh, DataCacheSource, DataPayloadRefresh};
 
 use super::monitor::monitor_choices;
 use super::settings::{HotkeyCaptureTarget, Page, SettingsTab};
@@ -218,21 +218,22 @@ fn data_cache_refresh_records_success_and_failure() {
     let _ = application.begin_data_cache_refresh();
 
     application.record_data_cache_refresh_finished(Ok(DataCacheRefresh {
-        prices_path: "/tmp/wf-info/prices.json".into(),
-        filtered_items_path: "/tmp/wf-info/filtered_items.json".into(),
+        prices: remote_payload("/tmp/wf-info/prices.json"),
+        filtered_items: remote_payload("/tmp/wf-info/filtered_items.json"),
+        warframe_market_items: remote_payload("/tmp/wf-info/warframe_market_items.json"),
     }));
 
     assert!(!application.data_cache_refresh_in_progress);
-    assert!(application.status.contains("WFInfo data cache refreshed"));
+    assert_eq!(
+        application.status,
+        "Data cache ready: 3 remote payload(s), 0 local fallback payload(s)."
+    );
 
     let _ = application.begin_data_cache_refresh();
     application.record_data_cache_refresh_finished(Err("offline".to_owned()));
 
     assert!(!application.data_cache_refresh_in_progress);
-    assert_eq!(
-        application.status,
-        "WFInfo data cache refresh failed: offline"
-    );
+    assert_eq!(application.status, "Data cache refresh failed: offline");
 }
 
 #[test]
@@ -321,8 +322,9 @@ fn reward_scan_completion_records_last_scan_result() {
 fn data_cache_refresh_completion_records_last_result() {
     let mut application = Application::new(test_context());
     let refresh = DataCacheRefresh {
-        prices_path: "/tmp/wf-info/prices.json".into(),
-        filtered_items_path: "/tmp/wf-info/filtered_items.json".into(),
+        prices: remote_payload("/tmp/wf-info/prices.json"),
+        filtered_items: local_fallback_payload("/tmp/wf-info/filtered_items.json"),
+        warframe_market_items: remote_payload("/tmp/wf-info/warframe_market_items.json"),
     };
 
     application.record_data_cache_refresh_finished(Ok(refresh.clone()));
@@ -372,6 +374,20 @@ fn test_context() -> AppContext {
     let _ = std::fs::remove_file(&path);
 
     AppContext::new("wf-info-test").with_config_path(path)
+}
+
+fn remote_payload(path: &str) -> DataPayloadRefresh {
+    DataPayloadRefresh {
+        path: path.into(),
+        source: DataCacheSource::Remote,
+    }
+}
+
+fn local_fallback_payload(path: &str) -> DataPayloadRefresh {
+    DataPayloadRefresh {
+        path: path.into(),
+        source: DataCacheSource::LocalFallback,
+    }
 }
 
 fn monitor_info(name: &str) -> MonitorInfo {

@@ -32,13 +32,13 @@ impl Application {
         match result {
             Ok(refresh) => {
                 self.status = format!(
-                    "WFInfo data cache refreshed: {}, {}.",
-                    refresh.prices_path.display(),
-                    refresh.filtered_items_path.display()
+                    "Data cache ready: {} remote payload(s), {} local fallback payload(s).",
+                    refresh.remote_count(),
+                    refresh.local_fallback_count()
                 );
             }
             Err(err) => {
-                self.status = format!("WFInfo data cache refresh failed: {err}");
+                self.status = format!("Data cache refresh failed: {err}");
             }
         }
     }

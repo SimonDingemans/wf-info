@@ -28,16 +28,16 @@ Checklist status: checked items have a concrete implementation in the current Ru
 - Download and cache Warframe/WFInfo data:
   - [x] filtered relic/equipment data from `https://api.warframestat.us/wfinfo/filtered_items`
   - [x] price sheet from `https://api.warframestat.us/wfinfo/prices`
-  - warframe.market item metadata from `https://api.warframe.market/v2/items`
+  - [x] warframe.market item metadata from `https://api.warframe.market/v2/items`
 - Build local datasets for:
-  - market item names and slugs
+  - [x] market item names and slugs
   - [x] prime part platinum values
   - [x] ducat values
   - [x] trade volume
   - relic rewards
   - equipment sets and part counts
   - game-name to market-name translations
-- Cache remote payloads and fall back to local cache when network fetches fail.
+- [x] Cache remote payloads and fall back to local cache when network fetches fail.
 - [x] Support forced refresh without corrupting existing usable cache.
 - Preserve user-owned counts and mastered flags across data refreshes.
 - Detect and expose vaulted relic/part state.
@@ -311,7 +311,7 @@ Wayland/Linux note: automatic detection should read Warframe logs directly, like
 
 - [x] Basic extensible application UI
 - [x] Settings persistence
-- Data download/cache/fallback
+- [x] Data download/cache/fallback
 - [x] Warframe log discovery/tailing
 - [x] Automatic end-of-mission reward detection from logs
 - [x] Screenshot capture
