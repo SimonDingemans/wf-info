@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use iced::Task;
 use shared::AppContext;
 use shared::config::Settings as AppSettings;
+use shared::monitor::{self, MonitorCaptureRegion};
 use shared::rewards::RewardOverlayEntry;
 
 use crate::reward_scan::{RewardScanTrigger, scan_rewards_for_overlay};
@@ -12,7 +13,14 @@ use super::state::Application;
 
 impl Application {
     pub(super) fn trigger_reward_scan(&mut self, trigger: RewardScanTrigger) -> Task<Message> {
+        if self.reward_scan_in_progress {
+            log::debug!("ignoring reward scan trigger {trigger:?}; scan already in progress");
+            self.status = "Reward scan is already running.".to_owned();
+            return Task::none();
+        }
+
         log::debug!("triggering reward scan from {trigger:?}");
+        self.reward_scan_in_progress = true;
         self.status = match &trigger {
             RewardScanTrigger::Log(detection) => {
                 format!(
@@ -26,9 +34,10 @@ impl Application {
         };
         let debug_capture_dir = reward_capture_debug_dir(&self.context);
         let scan_settings = self.reward_scan_settings();
+        let monitor_region = self.reward_scan_monitor_region();
 
         Task::perform(
-            scan_rewards_for_overlay(trigger, scan_settings, debug_capture_dir),
+            scan_rewards_for_overlay(trigger, scan_settings, debug_capture_dir, monitor_region),
             Message::RewardScanFinished,
         )
     }
@@ -53,11 +62,30 @@ impl Application {
         settings
     }
 
+    pub(super) fn reward_scan_monitor_region(&self) -> Option<MonitorCaptureRegion> {
+        let selected_monitor = self.selected_monitor.as_ref()?;
+        let monitors = self
+            .monitors
+            .iter()
+            .map(|choice| choice.info.clone())
+            .collect::<Vec<_>>();
+
+        match monitor::capture_region_for_monitor(&monitors, &selected_monitor.info) {
+            Ok(region) => Some(region),
+            Err(err) => {
+                log::warn!("could not reuse selected monitor geometry for reward scan: {err}");
+                None
+            }
+        }
+    }
+
     pub(super) fn record_reward_scan_finished(
         &mut self,
         result: Result<Vec<RewardOverlayEntry>, String>,
         overlay_result: Option<Result<u32, String>>,
     ) {
+        self.reward_scan_in_progress = false;
+
         match result {
             Ok(rewards) if rewards.is_empty() => {
                 self.status = "Reward scan completed, but no rewards were found.".to_owned();

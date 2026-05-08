@@ -179,6 +179,16 @@ pub fn capture_region_for_target(
     }))
 }
 
+pub fn capture_region_for_monitor(
+    monitors: &[MonitorInfo],
+    monitor: &MonitorInfo,
+) -> Result<MonitorCaptureRegion, String> {
+    Ok(MonitorCaptureRegion {
+        region: monitor.logical_region()?,
+        desktop_bounds: logical_desktop_bounds(monitors)?,
+    })
+}
+
 pub fn logical_desktop_bounds(monitors: &[MonitorInfo]) -> Result<MonitorRegion, String> {
     let mut regions = monitors
         .iter()
@@ -390,7 +400,10 @@ delegate_noop!(WaylandOutputState: ignore ZxdgOutputManagerV1);
 
 #[cfg(test)]
 mod tests {
-    use super::{MonitorInfo, MonitorRegion, WaylandOutputDetails, logical_desktop_bounds};
+    use super::{
+        MonitorInfo, MonitorRegion, WaylandOutputDetails, capture_region_for_monitor,
+        logical_desktop_bounds,
+    };
     use wayland_protocols::xdg::xdg_output::zv1::client::zxdg_output_v1;
 
     #[test]
@@ -478,6 +491,34 @@ mod tests {
             super::capture_region_for_target(&monitors, " primary ").expect("primary target");
 
         assert_eq!(region, None);
+    }
+
+    #[test]
+    fn capture_region_for_known_monitor_reuses_existing_geometry() {
+        let monitors = vec![
+            monitor_info("DP-1", (0, 0), (1920, 1080)),
+            monitor_info("DP-2", (1920, 0), (2560, 1440)),
+        ];
+
+        let region = capture_region_for_monitor(&monitors, &monitors[1]).expect("capture region");
+
+        assert_eq!(
+            region,
+            super::MonitorCaptureRegion {
+                region: MonitorRegion {
+                    x: 1920,
+                    y: 0,
+                    width: 2560,
+                    height: 1440,
+                },
+                desktop_bounds: MonitorRegion {
+                    x: 0,
+                    y: 0,
+                    width: 4480,
+                    height: 1440,
+                },
+            }
+        );
     }
 
     fn monitor_info(name: &str, position: (i32, i32), size: (i32, i32)) -> MonitorInfo {

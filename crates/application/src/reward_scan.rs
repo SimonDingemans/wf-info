@@ -1,7 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use ocr::implementations::reward_screen::{
@@ -26,29 +26,37 @@ pub(crate) async fn scan_rewards_for_overlay(
     trigger: RewardScanTrigger,
     settings: AppSettings,
     debug_capture_dir: PathBuf,
+    monitor_region: Option<MonitorCaptureRegion>,
 ) -> Result<Vec<RewardOverlayEntry>, String> {
     log::debug!("reward scan requested from {trigger:?}");
 
+    let started = Instant::now();
     ensure_supported_capture_settings(&settings)?;
-    let frame = capture_reward_frame(&settings)?;
+    let frame = capture_reward_frame(&settings, monitor_region)?;
+    let capture_elapsed = started.elapsed();
     let debug_capture_path =
         write_debug_capture_if_enabled(&frame, &trigger, &settings, &debug_capture_dir);
     let theme = reward_ui_theme_from_settings(&settings)?;
     let options = ocr_options_from_settings(&settings);
+    let ocr_started = Instant::now();
     let candidates = if debug_capture_output_enabled(&settings) {
         scan_reward_screen_frame_with_debug_images(&frame, theme, options, &debug_capture_dir)
     } else {
         scan_reward_screen_frame(&frame, theme, options)
     }
     .map_err(|err| err.to_string())?;
+    let ocr_elapsed = ocr_started.elapsed();
     let rewards = candidates
         .into_iter()
         .filter_map(reward_candidate_to_overlay_entry)
         .collect::<Vec<_>>();
 
-    log::debug!(
-        "reward scan produced {} overlay reward entrie(s); debug_capture={:?}",
+    log::info!(
+        "reward scan produced {} overlay reward entrie(s) in {:?} (capture={:?}, ocr={:?}); debug_capture={:?}",
         rewards.len(),
+        started.elapsed(),
+        capture_elapsed,
+        ocr_elapsed,
         debug_capture_path
     );
 
@@ -111,10 +119,6 @@ fn write_debug_capture(
 
 fn debug_capture_output_enabled(settings: &AppSettings) -> bool {
     settings.scanner.debug_images
-        || matches!(
-            settings.logging.level.trim().to_ascii_lowercase().as_str(),
-            "debug" | "trace"
-        )
 }
 
 fn debug_capture_trigger_label(trigger: &RewardScanTrigger) -> &'static str {
@@ -128,7 +132,10 @@ fn ensure_supported_capture_settings(settings: &AppSettings) -> Result<(), Strin
     settings.capture.validate_supported()
 }
 
-fn capture_reward_frame(settings: &AppSettings) -> Result<CapturedFrame, String> {
+fn capture_reward_frame(
+    settings: &AppSettings,
+    monitor_region: Option<MonitorCaptureRegion>,
+) -> Result<CapturedFrame, String> {
     match settings.capture.capture_method_kind()? {
         CaptureMethod::Fixture => {
             log::debug!("using bundled reward screen fixture as configured capture source");
@@ -136,24 +143,39 @@ fn capture_reward_frame(settings: &AppSettings) -> Result<CapturedFrame, String>
         }
         CaptureMethod::Portal => {
             let provider = PortalScreenshotCaptureProvider;
-            let request = capture_request_from_settings(settings)?;
+            let request = capture_request_from_settings(settings, monitor_region)?;
 
             provider.capture(request).map_err(|err| err.to_string())
         }
     }
 }
 
-fn capture_request_from_settings(settings: &AppSettings) -> Result<CaptureRequest, String> {
+fn capture_request_from_settings(
+    settings: &AppSettings,
+    monitor_region: Option<MonitorCaptureRegion>,
+) -> Result<CaptureRequest, String> {
     let mut request = CaptureRequest::new(settings.capture.monitor.clone());
 
-    if let Some((region, desktop_bounds)) = configured_monitor_region(settings)? {
+    if let Some((region, desktop_bounds)) = configured_monitor_region(settings, monitor_region)? {
         request = request.with_region(region, desktop_bounds);
     }
 
     Ok(request)
 }
 
-fn configured_monitor_region(settings: &AppSettings) -> Result<Option<(Rect, Rect)>, String> {
+fn configured_monitor_region(
+    settings: &AppSettings,
+    monitor_region: Option<MonitorCaptureRegion>,
+) -> Result<Option<(Rect, Rect)>, String> {
+    if let Some(region) = monitor_region {
+        log::debug!(
+            "using cached selected monitor capture region {:?} within desktop {:?}",
+            region.region,
+            region.desktop_bounds
+        );
+        return Ok(Some(ocr_capture_region(region)));
+    }
+
     let target = settings.capture.monitor.trim();
     if shared::monitor::target_uses_full_screenshot(target) {
         log::debug!(
@@ -269,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn debug_capture_output_is_enabled_by_scanner_setting_or_debug_logging() {
+    fn debug_capture_output_is_enabled_by_scanner_setting() {
         let mut settings = Settings::default();
 
         assert!(!debug_capture_output_enabled(&settings));
@@ -279,7 +301,7 @@ mod tests {
 
         settings.scanner.debug_images = false;
         settings.logging.level = " debug ".to_owned();
-        assert!(debug_capture_output_enabled(&settings));
+        assert!(!debug_capture_output_enabled(&settings));
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::env;
 use std::path::Path;
 use std::sync::Mutex;
 
-use kreuzberg_tesseract::TesseractAPI as Tesseract;
+use kreuzberg_tesseract::{TessPageSegMode, TesseractAPI as Tesseract};
 
 use super::pipeline::{OcrImage, OcrOptions, TextCandidate, TextRecognizer};
 use super::{OcrError, Result};
@@ -38,6 +38,13 @@ impl TesseractRecognizer {
                 "could not initialize Tesseract with datapath {data_path}: {err}"
             ))
         })?;
+        engine
+            .set_page_seg_mode(TessPageSegMode::PSM_SINGLE_BLOCK)
+            .map_err(|err| {
+                OcrError::Initialization(format!(
+                    "could not configure Tesseract page segmentation mode: {err}"
+                ))
+            })?;
 
         log::debug!("Tesseract OCR recognizer initialized");
 
