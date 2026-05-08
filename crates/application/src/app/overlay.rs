@@ -103,12 +103,23 @@ pub(super) fn spawn_reward_overlay(
 
     for reward in rewards {
         command.arg("--reward-name").arg(&reward.name);
+        append_optional_reward_arg(&mut command, "--reward-platinum", reward.platinum);
+        append_optional_reward_arg(&mut command, "--reward-ducats", reward.ducats);
+        command
+            .arg("--reward-vaulted")
+            .arg(reward.vaulted.to_string());
     }
 
     command
         .spawn()
         .map(|child| child.id())
         .map_err(|err| err.to_string())
+}
+
+fn append_optional_reward_arg(command: &mut ProcessCommand, name: &str, value: Option<u32>) {
+    if let Some(value) = value {
+        command.arg(name).arg(value.to_string());
+    }
 }
 
 fn overlay_command() -> Result<ProcessCommand, String> {

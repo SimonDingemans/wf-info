@@ -59,6 +59,21 @@ impl CliArgs {
                         rewards.push(RewardOverlayEntry::name_only(name));
                     }
                 }
+                "--reward-platinum" => {
+                    if let Some(platinum) = args.next().and_then(|value| value.parse().ok()) {
+                        set_last_reward_platinum(&mut rewards, platinum);
+                    }
+                }
+                "--reward-ducats" => {
+                    if let Some(ducats) = args.next().and_then(|value| value.parse().ok()) {
+                        set_last_reward_ducats(&mut rewards, ducats);
+                    }
+                }
+                "--reward-vaulted" => {
+                    if let Some(vaulted) = args.next().and_then(|value| parse_bool_arg(&value)) {
+                        set_last_reward_vaulted(&mut rewards, vaulted);
+                    }
+                }
                 _ => {}
             }
         }
@@ -67,6 +82,32 @@ impl CliArgs {
             debug_overlay: debug_overlay_from(mode, output_name, lines, rewards),
             config_overrides,
         }
+    }
+}
+
+fn set_last_reward_platinum(rewards: &mut [RewardOverlayEntry], platinum: u32) {
+    if let Some(reward) = rewards.last_mut() {
+        reward.set_platinum(platinum);
+    }
+}
+
+fn set_last_reward_ducats(rewards: &mut [RewardOverlayEntry], ducats: u32) {
+    if let Some(reward) = rewards.last_mut() {
+        reward.set_ducats(ducats);
+    }
+}
+
+fn set_last_reward_vaulted(rewards: &mut [RewardOverlayEntry], vaulted: bool) {
+    if let Some(reward) = rewards.last_mut() {
+        reward.set_vaulted(vaulted);
+    }
+}
+
+fn parse_bool_arg(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "yes" | "1" => Some(true),
+        "false" | "no" | "0" => Some(false),
+        _ => None,
     }
 }
 
@@ -130,8 +171,20 @@ mod tests {
                 "DP-1",
                 "--reward-name",
                 "Forma Blueprint",
+                "--reward-platinum",
+                "8",
+                "--reward-ducats",
+                "15",
+                "--reward-vaulted",
+                "false",
                 "--reward-name",
                 "Braton Prime Receiver",
+                "--reward-platinum",
+                "42",
+                "--reward-ducats",
+                "45",
+                "--reward-vaulted",
+                "yes",
             ]
             .into_iter()
             .map(str::to_owned),
@@ -145,7 +198,13 @@ mod tests {
                 assert_eq!(output_name.as_deref(), Some("DP-1"));
                 assert_eq!(rewards.len(), 2);
                 assert_eq!(rewards[0].name, "Forma Blueprint");
+                assert_eq!(rewards[0].platinum, Some(8));
+                assert_eq!(rewards[0].ducats, Some(15));
+                assert!(!rewards[0].vaulted);
                 assert_eq!(rewards[1].name, "Braton Prime Receiver");
+                assert_eq!(rewards[1].platinum, Some(42));
+                assert_eq!(rewards[1].ducats, Some(45));
+                assert!(rewards[1].vaulted);
             }
             _ => panic!("expected reward overlay"),
         }

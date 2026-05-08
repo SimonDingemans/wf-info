@@ -5,7 +5,10 @@ use iced::{
 use iced_layershell::reexport::{Anchor, KeyboardInteractivity, Layer};
 use iced_layershell::settings::{LayerShellSettings, Settings, StartMode};
 use iced_layershell::{Application, to_layer_message};
-use shared::{AppContext, rewards::RewardOverlayEntry};
+use shared::{
+    AppContext,
+    rewards::{RewardHighlight, RewardOverlayEntry},
+};
 
 pub enum DebugOverlay {
     MonitorInfo {
@@ -221,9 +224,17 @@ fn test_overlay_view() -> Element<'static, Message, Theme, Renderer> {
 }
 
 fn reward_overlay_view(rewards: &[RewardOverlayEntry]) -> Element<'_, Message, Theme, Renderer> {
-    let reward_cards = rewards.iter().fold(row![].spacing(10), |row, reward| {
-        row.push(reward_card(reward))
-    });
+    let best_platinum = best_platinum_reward_index(rewards);
+    let reward_cards =
+        rewards
+            .iter()
+            .enumerate()
+            .fold(row![].spacing(10), |row, (index, reward)| {
+                row.push(reward_card(
+                    reward,
+                    reward_is_best_platinum(index, reward, best_platinum),
+                ))
+            });
 
     container(reward_cards)
         .padding(18)
@@ -232,8 +243,8 @@ fn reward_overlay_view(rewards: &[RewardOverlayEntry]) -> Element<'_, Message, T
         .style(|_theme| container::Style {
             background: Some(Color::from_rgba(0.03, 0.04, 0.05, 0.78).into()),
             border: iced::Border {
-                color: Color::from_rgb(0.88, 0.72, 0.32),
-                width: 2.0,
+                color: Color::from_rgb(0.20, 0.23, 0.27),
+                width: 1.0,
                 radius: 4.0.into(),
             },
             text_color: Some(Color::WHITE),
@@ -242,41 +253,112 @@ fn reward_overlay_view(rewards: &[RewardOverlayEntry]) -> Element<'_, Message, T
         .into()
 }
 
-fn reward_card(reward: &RewardOverlayEntry) -> Element<'_, Message, Theme, Renderer> {
-    let mut details = column![text(&reward.name).size(16)].spacing(4);
+fn reward_card(
+    reward: &RewardOverlayEntry,
+    is_best_platinum: bool,
+) -> Element<'_, Message, Theme, Renderer> {
+    let details = column![
+        text(&reward.name).size(16).width(Length::Fill),
+        reward_detail("Platinum", reward.platinum),
+        reward_detail("Ducats", reward.ducats),
+        text(format!(
+            "Vaulted: {}",
+            if reward.vaulted { "Yes" } else { "No" }
+        ))
+        .size(14),
+    ]
+    .spacing(4);
 
-    if let Some(platinum) = reward.platinum {
-        details = details.push(text(format!("{platinum} platinum")).size(14));
-    }
+    let border_color = if is_best_platinum {
+        Color::from_rgb(1.0, 0.84, 0.0)
+    } else {
+        Color::from_rgb(0.30, 0.34, 0.38)
+    };
 
-    if let Some(ducats) = reward.ducats {
-        details = details.push(text(format!("{ducats} ducats")).size(14));
-    }
-
-    if let Some(volume) = reward.volume {
-        details = details.push(text(format!("{volume} sold recently")).size(13));
-    }
-
-    if reward.vaulted {
-        details = details.push(text("Vaulted").size(13));
-    }
-
-    if let (Some(owned), Some(required)) = (reward.owned_count, reward.required_count) {
-        details = details.push(text(format!("Owned {owned}/{required}")).size(13));
-    }
+    let border_width = if is_best_platinum { 3.0 } else { 1.0 };
 
     container(details)
         .padding(12)
         .width(Length::Fixed(180.0))
-        .style(|_theme| container::Style {
+        .style(move |_theme| container::Style {
             background: Some(Color::from_rgba(0.08, 0.09, 0.11, 0.92).into()),
             border: iced::Border {
-                color: Color::from_rgb(0.30, 0.34, 0.38),
-                width: 1.0,
+                color: border_color,
+                width: border_width,
                 radius: 4.0.into(),
             },
             text_color: Some(Color::WHITE),
             ..Default::default()
         })
         .into()
+}
+
+fn reward_detail(
+    label: &'static str,
+    value: Option<u32>,
+) -> Element<'static, Message, Theme, Renderer> {
+    text(format!(
+        "{label}: {}",
+        value
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "Unknown".to_owned())
+    ))
+    .size(14)
+    .into()
+}
+
+fn reward_is_best_platinum(
+    index: usize,
+    reward: &RewardOverlayEntry,
+    best_platinum: Option<usize>,
+) -> bool {
+    reward.highlight == RewardHighlight::BestPlatinum || best_platinum == Some(index)
+}
+
+fn best_platinum_reward_index(rewards: &[RewardOverlayEntry]) -> Option<usize> {
+    rewards
+        .iter()
+        .enumerate()
+        .filter_map(|(index, reward)| reward.platinum.map(|platinum| (index, platinum)))
+        .fold(None, |best, candidate| match best {
+            Some((_, best_platinum)) if best_platinum >= candidate.1 => best,
+            _ => Some(candidate),
+        })
+        .map(|(index, _)| index)
+}
+
+#[cfg(test)]
+mod tests {
+    use shared::rewards::{RewardHighlight, RewardOverlayEntry};
+
+    use super::{best_platinum_reward_index, reward_is_best_platinum};
+
+    #[test]
+    fn best_platinum_reward_index_uses_highest_available_platinum_value() {
+        let rewards = vec![
+            RewardOverlayEntry::name_only("Forma Blueprint").with_platinum(8),
+            RewardOverlayEntry::name_only("Braton Prime Receiver").with_platinum(42),
+            RewardOverlayEntry::name_only("Paris Prime String").with_platinum(15),
+        ];
+
+        assert_eq!(best_platinum_reward_index(&rewards), Some(1));
+    }
+
+    #[test]
+    fn best_platinum_reward_index_ignores_missing_platinum_values() {
+        let rewards = vec![
+            RewardOverlayEntry::name_only("Forma Blueprint"),
+            RewardOverlayEntry::name_only("Braton Prime Receiver").with_platinum(12),
+        ];
+
+        assert_eq!(best_platinum_reward_index(&rewards), Some(1));
+    }
+
+    #[test]
+    fn reward_highlight_can_mark_best_platinum_without_price_data() {
+        let mut reward = RewardOverlayEntry::name_only("Forma Blueprint");
+        reward.highlight = RewardHighlight::BestPlatinum;
+
+        assert!(reward_is_best_platinum(0, &reward, None));
+    }
 }
