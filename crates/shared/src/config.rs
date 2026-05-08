@@ -12,6 +12,8 @@ pub struct Config {
     #[serde(default)]
     pub scanner: ScannerConfig,
     #[serde(default)]
+    pub hotkeys: HotkeyConfig,
+    #[serde(default)]
     pub overlay: OverlayConfig,
     #[serde(default)]
     pub ocr: OcrConfig,
@@ -53,6 +55,18 @@ impl Config {
         }
     }
 
+    pub fn read_or_create(path: impl AsRef<Path>) -> Result<Self, String> {
+        let path = path.as_ref();
+
+        if path.exists() {
+            return Self::read(path);
+        }
+
+        let config = Self::default();
+        config.write(path)?;
+        Ok(config)
+    }
+
     pub fn write(&self, path: impl AsRef<Path>) -> Result<(), String> {
         let path = path.as_ref();
 
@@ -77,6 +91,7 @@ impl From<&Settings> for Config {
             app: AppConfig::from(&settings.app),
             capture: CaptureConfig::from(&settings.capture),
             scanner: ScannerConfig::from(&settings.scanner),
+            hotkeys: HotkeyConfig::from(&settings.hotkeys),
             overlay: OverlayConfig::from(&settings.overlay),
             ocr: OcrConfig::from(&settings.ocr),
             warframe: WarframeConfig::from(&settings.warframe),
@@ -90,6 +105,7 @@ pub struct Settings {
     pub app: AppSettings,
     pub capture: CaptureSettings,
     pub scanner: ScannerSettings,
+    pub hotkeys: HotkeySettings,
     pub overlay: OverlaySettings,
     pub ocr: OcrSettings,
     pub warframe: WarframeSettings,
@@ -168,6 +184,7 @@ impl From<Config> for Settings {
             app: AppSettings::from(config.app),
             capture: CaptureSettings::from(config.capture),
             scanner: ScannerSettings::from(config.scanner),
+            hotkeys: HotkeySettings::from(config.hotkeys),
             overlay: OverlaySettings::from(config.overlay),
             ocr: OcrSettings::from(config.ocr),
             warframe: WarframeSettings::from(config.warframe),
@@ -339,6 +356,47 @@ impl From<&ScannerSettings> for ScannerConfig {
             auto_delay_ms: settings.auto_delay_ms,
             debug_images: settings.debug_images,
             debug_image_retention_hours: settings.debug_image_retention_hours,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct HotkeyConfig {
+    #[serde(default = "default_activation_hotkey")]
+    pub activation: String,
+    #[serde(default = "default_dismiss_overlay_hotkey")]
+    pub dismiss_overlay: String,
+}
+
+impl Default for HotkeyConfig {
+    fn default() -> Self {
+        Self {
+            activation: default_activation_hotkey(),
+            dismiss_overlay: default_dismiss_overlay_hotkey(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HotkeySettings {
+    pub activation: String,
+    pub dismiss_overlay: String,
+}
+
+impl From<HotkeyConfig> for HotkeySettings {
+    fn from(config: HotkeyConfig) -> Self {
+        Self {
+            activation: config.activation,
+            dismiss_overlay: config.dismiss_overlay,
+        }
+    }
+}
+
+impl From<&HotkeySettings> for HotkeyConfig {
+    fn from(settings: &HotkeySettings) -> Self {
+        Self {
+            activation: settings.activation.clone(),
+            dismiss_overlay: settings.dismiss_overlay.clone(),
         }
     }
 }
@@ -596,6 +654,14 @@ const fn default_debug_image_retention_hours() -> u64 {
     12
 }
 
+fn default_activation_hotkey() -> String {
+    "F12".to_owned()
+}
+
+fn default_dismiss_overlay_hotkey() -> String {
+    "F11".to_owned()
+}
+
 const fn default_overlay_duration_ms() -> u64 {
     10_000
 }
@@ -615,6 +681,7 @@ fn default_log_level() -> String {
 #[cfg(test)]
 mod tests {
     use super::{CliConfigOverrides, Config, Settings};
+    use std::fs;
 
     #[test]
     fn partial_config_sections_use_defaults() {
@@ -638,6 +705,8 @@ monitor = "DP-1"
         assert_eq!(settings.capture.display_mode, "borderless_fullscreen");
         assert_eq!(settings.capture.aspect_ratio, "16:9");
         assert!(settings.scanner.enabled);
+        assert_eq!(settings.hotkeys.activation, "F12");
+        assert_eq!(settings.hotkeys.dismiss_overlay, "F11");
         assert_eq!(settings.overlay.duration_ms, 10_000);
         assert_eq!(settings.ocr.language, "eng");
         assert_eq!(settings.warframe.ui_theme, "lotus");
@@ -656,6 +725,7 @@ monitor = "DP-1"
         assert!(contents.contains("[app]"));
         assert!(contents.contains("[capture]"));
         assert!(contents.contains("[scanner]"));
+        assert!(contents.contains("[hotkeys]"));
         assert!(contents.contains("[overlay]"));
         assert!(contents.contains("[ocr]"));
         assert!(contents.contains("[warframe]"));
@@ -679,6 +749,23 @@ monitor = "DP-1"
             settings.to_config().capture.portal_restore_token.as_deref(),
             Some("restored-session")
         );
+    }
+
+    #[test]
+    fn read_or_create_writes_default_config_when_missing() {
+        let path =
+            std::env::temp_dir().join(format!("wf-info-config-create-{}.toml", std::process::id()));
+        let _ = fs::remove_file(&path);
+
+        let config = Config::read_or_create(&path).expect("missing config should be created");
+
+        assert_eq!(config, Config::default());
+        assert!(path.exists());
+        let contents = fs::read_to_string(&path).expect("created config should be readable");
+        assert!(contents.contains("[warframe]"));
+        assert!(contents.contains("ui_theme = \"lotus\""));
+
+        let _ = fs::remove_file(path);
     }
 
     #[test]

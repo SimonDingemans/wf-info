@@ -162,6 +162,10 @@ auto_delay_ms = 250
 debug_images = false
 debug_image_retention_hours = 12
 
+[hotkeys]
+activation = "F12"
+dismiss_overlay = "F11"
+
 [overlay]
 enabled = true
 x_offset = 0
@@ -204,6 +208,7 @@ Initial tabs:
 - App
 - Capture
 - Scanner
+- Hotkeys
 - Overlay
 - OCR
 - Warframe

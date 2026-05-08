@@ -17,8 +17,10 @@ shared = { path = "crates/shared" }
 application = { path = "crates/application" }
 ocr = { path = "crates/ocr" }
 overlay = { path = "crates/overlay" }
-ashpd = { version = "0.13", default-features = false, features = ["async-io", "screencast"] }
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "global_shortcuts", "screencast", "screenshot"] }
+async-io = "2"
 env_logger = "0.11"
+futures-util = "0.3"
 iced = { version = "0.13", features = ["tokio"] }
 iced_layershell = "0.13"
 image = "0.25"

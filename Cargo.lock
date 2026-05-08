@@ -4413,9 +4413,12 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "ashpd",
+ "async-io",
  "env_logger",
+ "futures-util",
  "log",
  "serde",
+ "thiserror 2.0.18",
  "toml",
  "wayland-client",
  "wayland-protocols",

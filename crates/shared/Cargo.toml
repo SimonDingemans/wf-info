@@ -5,9 +5,12 @@ edition.workspace = true
 
 [dependencies]
 ashpd.workspace = true
+async-io.workspace = true
 env_logger.workspace = true
+futures-util.workspace = true
 log.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 toml.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true

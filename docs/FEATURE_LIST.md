@@ -98,6 +98,7 @@ Wayland note: global hotkeys, pointer tracking, screenshots, and click-through o
 - Store user settings equivalent to the current app where useful for the Wayland/Linux product:
   - display mode
   - activation key
+  - overlay dismissal key
   - modifier keys
   - debug mode
   - locale

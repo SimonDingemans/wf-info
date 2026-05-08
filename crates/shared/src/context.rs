@@ -23,6 +23,11 @@ impl AppContext {
         self
     }
 
+    pub fn with_config_path(mut self, config_path: impl Into<PathBuf>) -> Self {
+        self.config_path = config_path.into();
+        self
+    }
+
     pub const fn name(&self) -> &'static str {
         self.name
     }
@@ -36,7 +41,7 @@ impl AppContext {
     }
 
     pub fn load_settings(&self) -> Result<Settings, String> {
-        Config::read(&self.config_path)
+        Config::read_or_create(&self.config_path)
             .map(|config| config.with_cli_overrides(&self.config_overrides))
             .map(Settings::from)
     }
