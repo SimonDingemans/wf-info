@@ -143,6 +143,86 @@ impl Default for CaptureConfig {
     }
 }
 
+impl CaptureConfig {
+    pub fn validate_supported(&self) -> Result<(), String> {
+        self.display_mode_kind()?;
+        self.aspect_ratio_kind()?;
+        self.capture_method_kind()?;
+        Ok(())
+    }
+
+    pub fn capture_method_kind(&self) -> Result<CaptureMethod, String> {
+        CaptureMethod::from_config_key(&self.capture_method).ok_or_else(|| {
+            format!(
+                "unsupported capture method {:?}; supported methods are portal and fixture",
+                self.capture_method
+            )
+        })
+    }
+
+    pub fn display_mode_kind(&self) -> Result<DisplayMode, String> {
+        DisplayMode::from_config_key(&self.display_mode).ok_or_else(|| {
+            format!(
+                "unsupported display mode {:?}; only borderless_fullscreen is supported",
+                self.display_mode
+            )
+        })
+    }
+
+    pub fn aspect_ratio_kind(&self) -> Result<AspectRatio, String> {
+        AspectRatio::from_config_key(&self.aspect_ratio).ok_or_else(|| {
+            format!(
+                "unsupported aspect ratio {:?}; only 16:9 is supported",
+                self.aspect_ratio
+            )
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureMethod {
+    Portal,
+    Fixture,
+}
+
+impl CaptureMethod {
+    pub fn from_config_key(value: &str) -> Option<Self> {
+        match normalize_config_key(value).as_str() {
+            "portal" => Some(Self::Portal),
+            "fixture" => Some(Self::Fixture),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DisplayMode {
+    BorderlessFullscreen,
+}
+
+impl DisplayMode {
+    pub fn from_config_key(value: &str) -> Option<Self> {
+        match normalize_config_key(value).as_str() {
+            "borderlessfullscreen" => Some(Self::BorderlessFullscreen),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AspectRatio {
+    SixteenByNine,
+}
+
+impl AspectRatio {
+    pub fn from_config_key(value: &str) -> Option<Self> {
+        match value.trim() {
+            "16:9" => Some(Self::SixteenByNine),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct ScannerConfig {
     #[serde(default = "default_true")]
@@ -328,9 +408,17 @@ fn default_log_level() -> String {
     "info".to_owned()
 }
 
+fn normalize_config_key(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CliConfigOverrides, Config, Settings};
+    use super::{CaptureMethod, CliConfigOverrides, Config, Settings};
     use std::fs;
 
     #[test]
@@ -439,5 +527,35 @@ file = "/tmp/wf-info.log"
         assert_eq!(config.app.locale, "nl");
         assert_eq!(config.logging.level, "debug");
         assert_eq!(config.logging.file, "/tmp/wf-info.log");
+    }
+
+    #[test]
+    fn capture_config_exposes_supported_typed_values() {
+        let mut settings = Settings::default();
+        settings.capture.capture_method = " Fixture ".to_owned();
+        settings.capture.display_mode = "borderless fullscreen".to_owned();
+
+        settings
+            .capture
+            .validate_supported()
+            .expect("supported capture config");
+
+        assert_eq!(
+            settings.capture.capture_method_kind(),
+            Ok(CaptureMethod::Fixture)
+        );
+    }
+
+    #[test]
+    fn capture_config_rejects_unsupported_values() {
+        let mut settings = Settings::default();
+        settings.capture.display_mode = "windowed".to_owned();
+
+        let err = settings
+            .capture
+            .validate_supported()
+            .expect_err("unsupported mode");
+
+        assert!(err.contains("borderless_fullscreen"));
     }
 }

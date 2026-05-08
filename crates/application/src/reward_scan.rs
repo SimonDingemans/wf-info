@@ -11,7 +11,7 @@ use ocr::{
     CaptureProvider, CaptureRequest, CapturedFrame, OcrOptions, PortalScreenshotCaptureProvider,
     Rect,
 };
-use shared::config::Settings as AppSettings;
+use shared::config::{CaptureMethod, Settings as AppSettings};
 use shared::monitor::MonitorInfo;
 use shared::rewards::RewardOverlayEntry;
 use shared::watchers::log_watcher::RewardScreenDetection;
@@ -125,41 +125,22 @@ fn debug_capture_trigger_label(trigger: &RewardScanTrigger) -> &'static str {
 }
 
 fn ensure_supported_capture_settings(settings: &AppSettings) -> Result<(), String> {
-    if settings.capture.display_mode != "borderless_fullscreen" {
-        return Err(format!(
-            "unsupported display mode {:?}; only borderless_fullscreen is supported",
-            settings.capture.display_mode
-        ));
-    }
-
-    if settings.capture.aspect_ratio != "16:9" {
-        return Err(format!(
-            "unsupported aspect ratio {:?}; only 16:9 is supported",
-            settings.capture.aspect_ratio
-        ));
-    }
-
-    let capture_method = normalized_capture_method(settings);
-    if !matches!(capture_method.as_str(), "portal" | "fixture") {
-        return Err(format!(
-            "unsupported capture method {:?}; supported methods are portal and fixture",
-            settings.capture.capture_method
-        ));
-    }
-
-    Ok(())
+    settings.capture.validate_supported()
 }
 
 fn capture_reward_frame(settings: &AppSettings) -> Result<CapturedFrame, String> {
-    if normalized_capture_method(settings) == "fixture" {
-        log::debug!("using bundled reward screen fixture as configured capture source");
-        return ocr::debug::reward_screen_fixture_frame().map_err(|err| err.to_string());
+    match settings.capture.capture_method_kind()? {
+        CaptureMethod::Fixture => {
+            log::debug!("using bundled reward screen fixture as configured capture source");
+            ocr::debug::reward_screen_fixture_frame().map_err(|err| err.to_string())
+        }
+        CaptureMethod::Portal => {
+            let provider = PortalScreenshotCaptureProvider;
+            let request = capture_request_from_settings(settings)?;
+
+            provider.capture(request).map_err(|err| err.to_string())
+        }
     }
-
-    let provider = PortalScreenshotCaptureProvider;
-    let request = capture_request_from_settings(settings)?;
-
-    provider.capture(request).map_err(|err| err.to_string())
 }
 
 fn capture_request_from_settings(settings: &AppSettings) -> Result<CaptureRequest, String> {
@@ -288,10 +269,6 @@ fn desktop_bounds(monitors: &[MonitorInfo]) -> Result<Rect, String> {
     log::debug!("logical desktop bounds for capture scaling: {bounds:?}");
 
     Ok(bounds)
-}
-
-fn normalized_capture_method(settings: &AppSettings) -> String {
-    settings.capture.capture_method.trim().to_ascii_lowercase()
 }
 
 fn reward_ui_theme_from_settings(settings: &AppSettings) -> Result<RewardUiTheme, String> {
