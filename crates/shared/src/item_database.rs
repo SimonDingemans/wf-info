@@ -111,6 +111,7 @@ impl Item {
         RewardOverlayEntry::name_only(self.drop_name.clone())
             .with_platinum(self.platinum.round().max(0.0) as u32)
             .with_ducats(self.ducats)
+            .with_volume(self.volume)
             .with_vaulted(self.vaulted)
     }
 }
@@ -446,6 +447,7 @@ mod tests {
         assert_eq!(entry.name, "Ash Prime Systems Blueprint");
         assert_eq!(entry.platinum, Some(22));
         assert_eq!(entry.ducats, Some(45));
+        assert_eq!(entry.volume, Some(7));
         assert!(entry.vaulted);
     }
 

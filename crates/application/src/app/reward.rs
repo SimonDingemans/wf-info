@@ -33,11 +33,18 @@ impl Application {
             }
         };
         let debug_capture_dir = reward_capture_debug_dir(&self.context);
+        let item_database_cache_dir = self.context.cache_dir().to_path_buf();
         let scan_settings = self.reward_scan_settings();
         let monitor_region = self.reward_scan_monitor_region();
 
         Task::perform(
-            scan_rewards_for_overlay(trigger, scan_settings, debug_capture_dir, monitor_region),
+            scan_rewards_for_overlay(
+                trigger,
+                scan_settings,
+                debug_capture_dir,
+                item_database_cache_dir,
+                monitor_region,
+            ),
             Message::RewardScanFinished,
         )
     }

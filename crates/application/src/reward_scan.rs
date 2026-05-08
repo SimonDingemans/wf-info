@@ -12,6 +12,7 @@ use ocr::{
     Rect,
 };
 use shared::config::{CaptureMethod, Settings as AppSettings};
+use shared::item_database::ItemDatabase;
 use shared::monitor::{MonitorCaptureRegion, MonitorRegion};
 use shared::rewards::RewardOverlayEntry;
 use shared::watchers::log_watcher::RewardScreenDetection;
@@ -26,6 +27,7 @@ pub(crate) async fn scan_rewards_for_overlay(
     trigger: RewardScanTrigger,
     settings: AppSettings,
     debug_capture_dir: PathBuf,
+    item_database_cache_dir: PathBuf,
     monitor_region: Option<MonitorCaptureRegion>,
 ) -> Result<Vec<RewardOverlayEntry>, String> {
     log::debug!("reward scan requested from {trigger:?}");
@@ -46,9 +48,12 @@ pub(crate) async fn scan_rewards_for_overlay(
     }
     .map_err(|err| err.to_string())?;
     let ocr_elapsed = ocr_started.elapsed();
+    let item_database = load_cached_item_database(&item_database_cache_dir);
     let rewards = candidates
         .into_iter()
-        .filter_map(reward_candidate_to_overlay_entry)
+        .filter_map(|candidate| {
+            reward_candidate_to_overlay_entry(candidate, item_database.as_ref())
+        })
         .collect::<Vec<_>>();
 
     log::info!(
@@ -61,6 +66,26 @@ pub(crate) async fn scan_rewards_for_overlay(
     );
 
     Ok(rewards)
+}
+
+fn load_cached_item_database(cache_dir: &Path) -> Option<ItemDatabase> {
+    match ItemDatabase::from_cache_dir(cache_dir) {
+        Ok(database) => {
+            log::debug!(
+                "loaded cached WFInfo item database with {} item(s) from {}",
+                database.len(),
+                cache_dir.display()
+            );
+            Some(database)
+        }
+        Err(err) => {
+            log::warn!(
+                "reward scan continuing without cached WFInfo item database from {}: {err}",
+                cache_dir.display()
+            );
+            None
+        }
+    }
 }
 
 fn write_debug_capture_if_enabled(
@@ -233,6 +258,7 @@ fn ocr_options_from_settings(settings: &AppSettings) -> OcrOptions {
 
 fn reward_candidate_to_overlay_entry(
     candidate: ocr::implementations::reward_screen::RewardNameCandidate,
+    item_database: Option<&ItemDatabase>,
 ) -> Option<RewardOverlayEntry> {
     let name = candidate
         .raw_text
@@ -242,6 +268,14 @@ fn reward_candidate_to_overlay_entry(
 
     if name.is_empty() {
         return None;
+    }
+
+    if let Some(item) = item_database.and_then(|database| {
+        database
+            .find_item(&candidate.normalized_text, None)
+            .or_else(|| database.find_item(&name, None))
+    }) {
+        return Some(item.reward_overlay_entry());
     }
 
     Some(RewardOverlayEntry::name_only(name))
@@ -257,6 +291,7 @@ mod tests {
     use ocr::implementations::reward_screen::RewardUiTheme;
     use ocr::{Rect, ScanRegion};
     use shared::config::Settings;
+    use shared::item_database::ItemDatabase;
 
     #[test]
     fn ocr_options_use_configured_settings_and_ignore_empty_tessdata_path() {
@@ -331,8 +366,58 @@ mod tests {
             ),
         };
 
-        let entry = reward_candidate_to_overlay_entry(candidate).expect("reward entry");
+        let entry = reward_candidate_to_overlay_entry(candidate, None).expect("reward entry");
 
         assert_eq!(entry.name, "Forma Blueprint");
+    }
+
+    #[test]
+    fn reward_candidate_is_enriched_from_item_database_when_available() {
+        let database = ItemDatabase::from_json(
+            r#"[
+                {
+                    "name": "Ash Prime Systems Blueprint",
+                    "custom_avg": "22.0",
+                    "yesterday_vol": "3",
+                    "today_vol": "4"
+                }
+            ]"#,
+            r#"{
+                "eqmt": {
+                    "Ash Prime": {
+                        "type": "Warframes",
+                        "vaulted": true,
+                        "parts": {
+                            "Ash Prime Systems": { "ducats": 45 }
+                        }
+                    }
+                },
+                "ignored_items": {}
+            }"#,
+        )
+        .expect("item database");
+        let candidate = RewardNameCandidate {
+            raw_text: "Ash Prime Systerns Blueprint".to_owned(),
+            normalized_text: "ash prime systerns blueprint".to_owned(),
+            confidence: Some(96.0),
+            region: ScanRegion::new(
+                "reward-1",
+                Rect {
+                    x: 0,
+                    y: 0,
+                    width: 100,
+                    height: 24,
+                },
+            ),
+        };
+
+        let entry =
+            reward_candidate_to_overlay_entry(candidate, Some(&database)).expect("reward entry");
+
+        assert_eq!(entry.name, "Ash Prime Systems Blueprint");
+        assert_eq!(entry.platinum, Some(22));
+        assert_eq!(entry.ducats, Some(45));
+        assert_eq!(entry.volume, Some(7));
+        assert!(entry.vaulted);
     }
 }

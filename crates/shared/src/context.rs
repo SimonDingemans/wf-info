@@ -6,6 +6,7 @@ use crate::config::{CliConfigOverrides, Config, Settings};
 pub struct AppContext {
     name: &'static str,
     config_path: PathBuf,
+    cache_dir: PathBuf,
     config_overrides: CliConfigOverrides,
 }
 
@@ -14,6 +15,7 @@ impl AppContext {
         Self {
             name,
             config_path: Config::path_for_app(name),
+            cache_dir: cache_dir_for_app(name),
             config_overrides: CliConfigOverrides::default(),
         }
     }
@@ -28,12 +30,21 @@ impl AppContext {
         self
     }
 
+    pub fn with_cache_dir(mut self, cache_dir: impl Into<PathBuf>) -> Self {
+        self.cache_dir = cache_dir.into();
+        self
+    }
+
     pub const fn name(&self) -> &'static str {
         self.name
     }
 
     pub fn config_path(&self) -> &Path {
         &self.config_path
+    }
+
+    pub fn cache_dir(&self) -> &Path {
+        &self.cache_dir
     }
 
     pub fn config_overrides(&self) -> &CliConfigOverrides {
@@ -48,5 +59,26 @@ impl AppContext {
 
     pub fn save_settings(&self, settings: &Settings) -> Result<(), String> {
         settings.write(&self.config_path)
+    }
+}
+
+fn cache_dir_for_app(app_name: &str) -> PathBuf {
+    std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(app_name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppContext;
+
+    #[test]
+    fn app_context_allows_cache_dir_override_for_service_tests() {
+        let cache_dir = std::env::temp_dir().join("wf-info-context-cache-test");
+        let context = AppContext::new("wf-info-test").with_cache_dir(&cache_dir);
+
+        assert_eq!(context.cache_dir(), cache_dir.as_path());
     }
 }
