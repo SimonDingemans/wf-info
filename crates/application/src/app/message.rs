@@ -5,7 +5,7 @@ use shared::watchers::events::ServiceEvent;
 use crate::data_cache::DataCacheRefresh;
 
 use super::monitor::MonitorChoice;
-use super::settings::SettingsTab;
+use super::settings::{HotkeyCaptureTarget, SettingsTab};
 
 #[derive(Clone, Debug)]
 pub(super) enum Message {
@@ -23,6 +23,7 @@ pub(super) enum Message {
     CancelSettings,
     SaveSettings,
     SettingsTabSelected(SettingsTab),
+    UiEvent(iced::Event),
     SettingsAppLocaleChanged(String),
     SettingsAppStartMinimizedChanged(bool),
     SettingsCaptureMonitorChanged(String),
@@ -30,22 +31,21 @@ pub(super) enum Message {
     SettingsDisplayModeChanged(String),
     SettingsAspectRatioChanged(String),
     SettingsScannerEnabledChanged(bool),
-    SettingsScannerAutoDelayChanged(String),
+    SettingsScannerAutoDelayChanged(u32),
     SettingsScannerDebugImagesChanged(bool),
-    SettingsScannerRetentionChanged(String),
-    SettingsActivationHotkeyChanged(String),
-    SettingsDismissOverlayHotkeyChanged(String),
+    SettingsScannerRetentionChanged(u32),
+    StartHotkeyCapture(HotkeyCaptureTarget),
     SettingsOverlayEnabledChanged(bool),
-    SettingsOverlayXOffsetChanged(String),
-    SettingsOverlayYOffsetChanged(String),
-    SettingsOverlayDurationChanged(String),
+    SettingsOverlayXOffsetChanged(i32),
+    SettingsOverlayYOffsetChanged(i32),
+    SettingsOverlayDurationChanged(u32),
     SettingsOverlayHighContrastChanged(bool),
     SettingsClipboardEnabledChanged(bool),
     SettingsClipboardVaultedMarkerChanged(bool),
     SettingsClipboardFooterChanged(String),
     SettingsOcrLanguageChanged(String),
     SettingsTesseractDataPathChanged(String),
-    SettingsOcrConfidenceChanged(String),
+    SettingsOcrConfidenceChanged(f32),
     SettingsWarframeLogPathChanged(String),
     SettingsWarframeUiThemeChanged(String),
     SettingsLoggingLevelChanged(String),

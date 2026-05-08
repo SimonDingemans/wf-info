@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::data_cache::DataCacheRefresh;
 
 use super::monitor::monitor_choices;
-use super::settings::{Page, SettingsTab};
+use super::settings::{HotkeyCaptureTarget, Page, SettingsTab};
 use super::state::Application;
 
 #[test]
@@ -175,6 +175,33 @@ fn settings_page_rejects_unsupported_capture_values() {
         application.settings.capture.display_mode,
         "borderless_fullscreen"
     );
+}
+
+#[test]
+fn settings_hotkey_capture_updates_targeted_draft_hotkey() {
+    let mut application = Application::new(test_context());
+
+    application.begin_hotkey_capture(HotkeyCaptureTarget::Activation);
+    application.finish_hotkey_capture("Ctrl+Shift+F12".to_owned());
+
+    assert_eq!(application.capturing_hotkey, None);
+    assert_eq!(
+        application.settings_draft.hotkeys.activation,
+        "Ctrl+Shift+F12"
+    );
+    assert_eq!(application.settings.hotkeys.activation, "F12");
+}
+
+#[test]
+fn settings_hotkey_capture_can_be_cancelled() {
+    let mut application = Application::new(test_context());
+
+    application.begin_hotkey_capture(HotkeyCaptureTarget::DismissOverlay);
+    application.cancel_hotkey_capture();
+
+    assert_eq!(application.capturing_hotkey, None);
+    assert_eq!(application.status, "Hotkey capture cancelled.");
+    assert_eq!(application.settings_draft.hotkeys.dismiss_overlay, "F11");
 }
 
 #[test]

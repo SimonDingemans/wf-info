@@ -1,4 +1,4 @@
-use iced::{Subscription, Task, Theme, clipboard};
+use iced::{Event, Subscription, Task, Theme, clipboard, event, keyboard};
 use shared::AppContext;
 
 use crate::subscriptions;
@@ -28,7 +28,9 @@ impl Application {
     }
 
     pub(super) fn update(&mut self, message: Message) -> Task<Message> {
-        log::debug!("iced application update event: {message:?}");
+        if !matches!(message, Message::UiEvent(_)) {
+            log::debug!("iced application update event: {message:?}");
+        }
 
         match message {
             Message::DetectMonitorInfo => {
@@ -110,6 +112,10 @@ impl Application {
                 self.select_settings_tab(tab);
                 Task::none()
             }
+            Message::UiEvent(event) => {
+                self.handle_ui_event(event);
+                Task::none()
+            }
             Message::SettingsAppLocaleChanged(value) => {
                 self.set_settings_app_locale(value);
                 Task::none()
@@ -150,12 +156,8 @@ impl Application {
                 self.set_settings_scanner_retention(value);
                 Task::none()
             }
-            Message::SettingsActivationHotkeyChanged(value) => {
-                self.set_settings_activation_hotkey(value);
-                Task::none()
-            }
-            Message::SettingsDismissOverlayHotkeyChanged(value) => {
-                self.set_settings_dismiss_overlay_hotkey(value);
+            Message::StartHotkeyCapture(target) => {
+                self.begin_hotkey_capture(target);
                 Task::none()
             }
             Message::SettingsOverlayEnabledChanged(value) => {
@@ -241,10 +243,85 @@ impl Application {
 
     pub(super) fn subscription(&self) -> Subscription<Message> {
         Subscription::batch(vec![
+            event::listen().map(Message::UiEvent),
             subscriptions::log_watcher::log_watcher_subscription(&self.settings)
                 .map(Message::ServiceEvent),
             subscriptions::hotkey_watcher::hotkey_watcher_subscription(&self.settings)
                 .map(Message::ServiceEvent),
         ])
     }
+
+    fn handle_ui_event(&mut self, event: Event) {
+        if self.capturing_hotkey.is_none() {
+            return;
+        }
+
+        let Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) = event else {
+            return;
+        };
+
+        if matches!(
+            key.as_ref(),
+            keyboard::Key::Named(keyboard::key::Named::Escape)
+        ) {
+            self.cancel_hotkey_capture();
+            return;
+        }
+
+        let Some(accelerator) = accelerator_from_key_press(&key, modifiers) else {
+            return;
+        };
+
+        self.finish_hotkey_capture(accelerator);
+    }
+}
+
+fn accelerator_from_key_press(
+    key: &keyboard::Key,
+    modifiers: keyboard::Modifiers,
+) -> Option<String> {
+    let key = key_label(key)?;
+    let mut parts = Vec::new();
+
+    if modifiers.control() {
+        parts.push("Ctrl");
+    }
+    if modifiers.alt() {
+        parts.push("Alt");
+    }
+    if modifiers.shift() {
+        parts.push("Shift");
+    }
+    if modifiers.logo() {
+        parts.push("Super");
+    }
+
+    parts.push(&key);
+    Some(parts.join("+"))
+}
+
+fn key_label(key: &keyboard::Key) -> Option<String> {
+    match key.as_ref() {
+        keyboard::Key::Character(character) => Some(character.to_ascii_uppercase()),
+        keyboard::Key::Named(named) if is_modifier_key(named) => None,
+        keyboard::Key::Named(named) => Some(format!("{named:?}")),
+        keyboard::Key::Unidentified => None,
+    }
+}
+
+fn is_modifier_key(key: keyboard::key::Named) -> bool {
+    matches!(
+        key,
+        keyboard::key::Named::Alt
+            | keyboard::key::Named::AltGraph
+            | keyboard::key::Named::Control
+            | keyboard::key::Named::Fn
+            | keyboard::key::Named::FnLock
+            | keyboard::key::Named::Hyper
+            | keyboard::key::Named::Meta
+            | keyboard::key::Named::Shift
+            | keyboard::key::Named::Super
+            | keyboard::key::Named::Symbol
+            | keyboard::key::Named::SymbolLock
+    )
 }

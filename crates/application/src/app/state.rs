@@ -2,7 +2,7 @@ use shared::AppContext;
 use shared::config::Settings as AppSettings;
 
 use super::monitor::MonitorChoice;
-use super::settings::{Page, SettingsTab};
+use super::settings::{HotkeyCaptureTarget, Page, SettingsTab};
 
 #[derive(Debug)]
 pub(super) struct Application {
@@ -18,6 +18,7 @@ pub(super) struct Application {
     pub(super) page: Page,
     pub(super) settings_tab: SettingsTab,
     pub(super) settings_draft: AppSettings,
+    pub(super) capturing_hotkey: Option<HotkeyCaptureTarget>,
 }
 
 impl Application {
@@ -52,6 +53,7 @@ impl Application {
             page: Page::Launcher,
             settings_tab: SettingsTab::App,
             settings_draft,
+            capturing_hotkey: None,
         }
     }
 }

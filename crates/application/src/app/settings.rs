@@ -19,6 +19,12 @@ pub(super) enum SettingsTab {
     Logging,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum HotkeyCaptureTarget {
+    Activation,
+    DismissOverlay,
+}
+
 impl SettingsTab {
     pub(super) const ALL: [Self; 9] = [
         Self::App,
@@ -135,50 +141,67 @@ impl Application {
         self.settings_draft.scanner.enabled = value;
     }
 
-    pub(super) fn set_settings_scanner_auto_delay(&mut self, value: String) {
-        if let Ok(value) = value.trim().parse() {
-            self.settings_draft.scanner.auto_delay_ms = value;
-        }
+    pub(super) fn set_settings_scanner_auto_delay(&mut self, value: u32) {
+        self.settings_draft.scanner.auto_delay_ms = u64::from(value);
     }
 
     pub(super) fn set_settings_scanner_debug_images(&mut self, value: bool) {
         self.settings_draft.scanner.debug_images = value;
     }
 
-    pub(super) fn set_settings_scanner_retention(&mut self, value: String) {
-        if let Ok(value) = value.trim().parse() {
-            self.settings_draft.scanner.debug_image_retention_hours = value;
+    pub(super) fn set_settings_scanner_retention(&mut self, value: u32) {
+        self.settings_draft.scanner.debug_image_retention_hours = u64::from(value);
+    }
+
+    pub(super) fn begin_hotkey_capture(&mut self, target: HotkeyCaptureTarget) {
+        self.capturing_hotkey = Some(target);
+        self.status = match target {
+            HotkeyCaptureTarget::Activation => {
+                "Press the activation hotkey combination.".to_owned()
+            }
+            HotkeyCaptureTarget::DismissOverlay => {
+                "Press the overlay dismissal hotkey combination.".to_owned()
+            }
+        };
+    }
+
+    pub(super) fn finish_hotkey_capture(&mut self, accelerator: String) {
+        let Some(target) = self.capturing_hotkey.take() else {
+            return;
+        };
+
+        match target {
+            HotkeyCaptureTarget::Activation => {
+                self.settings_draft.hotkeys.activation = accelerator;
+            }
+            HotkeyCaptureTarget::DismissOverlay => {
+                self.settings_draft.hotkeys.dismiss_overlay = accelerator;
+            }
         }
+
+        self.status = "Hotkey captured. Save settings to apply it.".to_owned();
     }
 
-    pub(super) fn set_settings_activation_hotkey(&mut self, value: String) {
-        self.settings_draft.hotkeys.activation = value;
-    }
-
-    pub(super) fn set_settings_dismiss_overlay_hotkey(&mut self, value: String) {
-        self.settings_draft.hotkeys.dismiss_overlay = value;
+    pub(super) fn cancel_hotkey_capture(&mut self) {
+        if self.capturing_hotkey.take().is_some() {
+            self.status = "Hotkey capture cancelled.".to_owned();
+        }
     }
 
     pub(super) fn set_settings_overlay_enabled(&mut self, value: bool) {
         self.settings_draft.overlay.enabled = value;
     }
 
-    pub(super) fn set_settings_overlay_x_offset(&mut self, value: String) {
-        if let Ok(value) = value.trim().parse() {
-            self.settings_draft.overlay.x_offset = value;
-        }
+    pub(super) fn set_settings_overlay_x_offset(&mut self, value: i32) {
+        self.settings_draft.overlay.x_offset = value;
     }
 
-    pub(super) fn set_settings_overlay_y_offset(&mut self, value: String) {
-        if let Ok(value) = value.trim().parse() {
-            self.settings_draft.overlay.y_offset = value;
-        }
+    pub(super) fn set_settings_overlay_y_offset(&mut self, value: i32) {
+        self.settings_draft.overlay.y_offset = value;
     }
 
-    pub(super) fn set_settings_overlay_duration(&mut self, value: String) {
-        if let Ok(value) = value.trim().parse() {
-            self.settings_draft.overlay.duration_ms = value;
-        }
+    pub(super) fn set_settings_overlay_duration(&mut self, value: u32) {
+        self.settings_draft.overlay.duration_ms = u64::from(value);
     }
 
     pub(super) fn set_settings_overlay_high_contrast(&mut self, value: bool) {
@@ -205,10 +228,8 @@ impl Application {
         self.settings_draft.ocr.tesseract_data_path = value;
     }
 
-    pub(super) fn set_settings_ocr_confidence(&mut self, value: String) {
-        if let Ok(value) = value.trim().parse() {
-            self.settings_draft.ocr.confidence_threshold = value;
-        }
+    pub(super) fn set_settings_ocr_confidence(&mut self, value: f32) {
+        self.settings_draft.ocr.confidence_threshold = value;
     }
 
     pub(super) fn set_settings_warframe_log_path(&mut self, value: String) {

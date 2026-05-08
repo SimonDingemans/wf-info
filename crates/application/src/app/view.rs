@@ -1,12 +1,38 @@
 use iced::widget::{
-    button, checkbox, column, container, pick_list, row, scrollable, text, text_input,
+    button, checkbox, column, container, pick_list, row, scrollable, slider, text, text_input,
+    tooltip,
 };
 use iced::{Element, Length};
 use shared::config::Settings as AppSettings;
 
 use super::message::Message;
-use super::settings::{Page, SettingsTab};
+use super::monitor::MonitorChoice;
+use super::settings::{HotkeyCaptureTarget, Page, SettingsTab};
 use super::state::Application;
+
+const LOCALE_OPTIONS: &[&str] = &["en", "de", "es", "fr", "it", "nl", "pl", "pt", "ru", "tr"];
+const CAPTURE_METHOD_OPTIONS: &[&str] = &["portal", "fixture"];
+const DISPLAY_MODE_OPTIONS: &[&str] = &["borderless_fullscreen"];
+const ASPECT_RATIO_OPTIONS: &[&str] = &["16:9"];
+const OCR_LANGUAGE_OPTIONS: &[&str] = &["eng", "deu", "fra", "ita", "spa", "pol", "por", "rus"];
+const WARFRAME_THEME_OPTIONS: &[&str] = &[
+    "lotus",
+    "vitruvian",
+    "stalker",
+    "baruuk",
+    "corpus",
+    "fortuna",
+    "grineer",
+    "nidus",
+    "orokin",
+    "tenno",
+    "high_contrast",
+    "legacy",
+    "equinox",
+    "dark_lotus",
+    "zephyr",
+];
+const LOG_LEVEL_OPTIONS: &[&str] = &["error", "warn", "info", "debug", "trace"];
 
 impl Application {
     pub(super) fn view(&self) -> Element<'_, Message> {
@@ -108,7 +134,12 @@ impl Application {
                 .on_press(Message::CancelSettings),
         ]
         .spacing(12);
-        let settings_form = settings_tab_view(self.settings_tab, &self.settings_draft);
+        let settings_form = settings_tab_view(
+            self.settings_tab,
+            &self.settings_draft,
+            &self.monitors,
+            self.capturing_hotkey,
+        );
 
         let content = column![
             row![text("Settings").size(32), actions]
@@ -130,41 +161,59 @@ impl Application {
     }
 }
 
-fn settings_tab_view(tab: SettingsTab, settings: &AppSettings) -> Element<'_, Message> {
+fn settings_tab_view<'a>(
+    tab: SettingsTab,
+    settings: &'a AppSettings,
+    monitors: &'a [MonitorChoice],
+    capturing_hotkey: Option<HotkeyCaptureTarget>,
+) -> Element<'a, Message> {
     match tab {
         SettingsTab::App => section(
             "App",
             column![
-                text_field(
+                pick_field(
                     "Locale",
+                    "Language used for app text and item-name matching.",
                     &settings.app.locale,
+                    LOCALE_OPTIONS,
                     Message::SettingsAppLocaleChanged
                 ),
-                checkbox("Start minimized", settings.app.start_minimized)
-                    .on_toggle(Message::SettingsAppStartMinimizedChanged),
+                checkbox_field(
+                    "Start minimized",
+                    "Start the launcher without foregrounding the main window.",
+                    settings.app.start_minimized,
+                    Message::SettingsAppStartMinimizedChanged
+                ),
             ],
         ),
         SettingsTab::Capture => section(
             "Capture",
             column![
-                text_field(
+                monitor_pick_field(
                     "Monitor/output",
-                    &settings.capture.monitor,
-                    Message::SettingsCaptureMonitorChanged
+                    "Configured output used for capture and overlay placement.",
+                    settings,
+                    monitors
                 ),
-                text_field(
+                pick_field(
                     "Capture method",
+                    "Wayland portal is the normal capture path; fixture uses the bundled test image.",
                     &settings.capture.capture_method,
+                    CAPTURE_METHOD_OPTIONS,
                     Message::SettingsCaptureMethodChanged
                 ),
-                text_field(
+                pick_field(
                     "Display mode",
+                    "Only borderless fullscreen Warframe is supported in Phase 1.",
                     &settings.capture.display_mode,
+                    DISPLAY_MODE_OPTIONS,
                     Message::SettingsDisplayModeChanged
                 ),
-                text_field(
+                pick_field(
                     "Aspect ratio",
+                    "Reward-screen detection currently assumes a 16:9 game frame.",
                     &settings.capture.aspect_ratio,
+                    ASPECT_RATIO_OPTIONS,
                     Message::SettingsAspectRatioChanged
                 ),
             ],
@@ -172,18 +221,32 @@ fn settings_tab_view(tab: SettingsTab, settings: &AppSettings) -> Element<'_, Me
         SettingsTab::Scanner => section(
             "Scanner",
             column![
-                checkbox("Enable automatic reward scanner", settings.scanner.enabled)
-                    .on_toggle(Message::SettingsScannerEnabledChanged),
-                text_field(
+                checkbox_field(
+                    "Enable automatic reward scanner",
+                    "Listen for Warframe reward-screen log markers and scan automatically.",
+                    settings.scanner.enabled,
+                    Message::SettingsScannerEnabledChanged
+                ),
+                u32_slider_field(
                     "Automatic OCR delay (ms)",
-                    &settings.scanner.auto_delay_ms.to_string(),
+                    "Wait this long after the log marker before capturing the reward screen.",
+                    settings.scanner.auto_delay_ms as u32,
+                    0..=5_000,
+                    50,
                     Message::SettingsScannerAutoDelayChanged
                 ),
-                checkbox("Save debug images", settings.scanner.debug_images)
-                    .on_toggle(Message::SettingsScannerDebugImagesChanged),
-                text_field(
+                checkbox_field(
+                    "Save debug images",
+                    "Write full captures and OCR crops for reward-scan debugging.",
+                    settings.scanner.debug_images,
+                    Message::SettingsScannerDebugImagesChanged
+                ),
+                u32_slider_field(
                     "Debug image retention (hours)",
-                    &settings.scanner.debug_image_retention_hours.to_string(),
+                    "Delete old reward debug captures after this many hours.",
+                    settings.scanner.debug_image_retention_hours as u32,
+                    0..=168,
+                    1,
                     Message::SettingsScannerRetentionChanged
                 ),
             ],
@@ -191,57 +254,81 @@ fn settings_tab_view(tab: SettingsTab, settings: &AppSettings) -> Element<'_, Me
         SettingsTab::Hotkeys => section(
             "Hotkeys",
             column![
-                text_field(
+                hotkey_field(
                     "Activation hotkey",
+                    "Click the button, then press the key or key combination that should trigger reward scanning.",
                     &settings.hotkeys.activation,
-                    Message::SettingsActivationHotkeyChanged
+                    HotkeyCaptureTarget::Activation,
+                    capturing_hotkey
                 ),
-                text_field(
+                hotkey_field(
                     "Dismiss overlay hotkey",
+                    "Click the button, then press the key or key combination that should dismiss reward overlays.",
                     &settings.hotkeys.dismiss_overlay,
-                    Message::SettingsDismissOverlayHotkeyChanged
+                    HotkeyCaptureTarget::DismissOverlay,
+                    capturing_hotkey
                 ),
             ],
         ),
         SettingsTab::Overlay => section(
             "Overlay",
             column![
-                checkbox("Show reward overlay", settings.overlay.enabled)
-                    .on_toggle(Message::SettingsOverlayEnabledChanged),
-                text_field(
+                checkbox_field(
+                    "Show reward overlay",
+                    "Display reward results in the layer-shell overlay after scans.",
+                    settings.overlay.enabled,
+                    Message::SettingsOverlayEnabledChanged
+                ),
+                i32_slider_field(
                     "X offset",
-                    &settings.overlay.x_offset.to_string(),
+                    "Move the reward overlay horizontally from its detected position.",
+                    settings.overlay.x_offset,
+                    -500..=500,
+                    1,
                     Message::SettingsOverlayXOffsetChanged
                 ),
-                text_field(
+                i32_slider_field(
                     "Y offset",
-                    &settings.overlay.y_offset.to_string(),
+                    "Move the reward overlay vertically from its detected position.",
+                    settings.overlay.y_offset,
+                    -500..=500,
+                    1,
                     Message::SettingsOverlayYOffsetChanged
                 ),
-                text_field(
+                u32_slider_field(
                     "Auto-hide delay (ms)",
-                    &settings.overlay.duration_ms.to_string(),
+                    "Keep the reward overlay visible for this duration.",
+                    settings.overlay.duration_ms as u32,
+                    1_000..=60_000,
+                    500,
                     Message::SettingsOverlayDurationChanged
                 ),
-                checkbox("High contrast overlay", settings.overlay.high_contrast)
-                    .on_toggle(Message::SettingsOverlayHighContrastChanged),
+                checkbox_field(
+                    "High contrast overlay",
+                    "Use a stronger overlay background for readability.",
+                    settings.overlay.high_contrast,
+                    Message::SettingsOverlayHighContrastChanged
+                ),
             ],
         ),
         SettingsTab::Clipboard => section(
             "Clipboard",
             column![
-                checkbox(
+                checkbox_field(
                     "Copy reward summaries after scans",
-                    settings.clipboard.enabled
-                )
-                .on_toggle(Message::SettingsClipboardEnabledChanged),
-                checkbox(
+                    "Copy a plain-text reward summary when OCR succeeds.",
+                    settings.clipboard.enabled,
+                    Message::SettingsClipboardEnabledChanged
+                ),
+                checkbox_field(
                     "Include vaulted marker",
-                    settings.clipboard.include_vaulted_marker
-                )
-                .on_toggle(Message::SettingsClipboardVaultedMarkerChanged),
+                    "Append a vaulted note for vaulted reward parts in clipboard output.",
+                    settings.clipboard.include_vaulted_marker,
+                    Message::SettingsClipboardVaultedMarkerChanged
+                ),
                 text_field(
                     "Footer",
+                    "Optional text appended to copied reward summaries.",
                     &settings.clipboard.footer,
                     Message::SettingsClipboardFooterChanged
                 ),
@@ -250,19 +337,25 @@ fn settings_tab_view(tab: SettingsTab, settings: &AppSettings) -> Element<'_, Me
         SettingsTab::Ocr => section(
             "OCR",
             column![
-                text_field(
+                pick_field(
                     "Language",
+                    "Tesseract language code used for reward-name OCR.",
                     &settings.ocr.language,
+                    OCR_LANGUAGE_OPTIONS,
                     Message::SettingsOcrLanguageChanged
                 ),
                 text_field(
                     "Tesseract data path",
+                    "Optional custom tessdata path; leave empty to use the system default.",
                     &settings.ocr.tesseract_data_path,
                     Message::SettingsTesseractDataPathChanged
                 ),
-                text_field(
+                f32_slider_field(
                     "Confidence threshold",
-                    &settings.ocr.confidence_threshold.to_string(),
+                    "Discard OCR candidates below this confidence score.",
+                    settings.ocr.confidence_threshold,
+                    0.0..=100.0,
+                    1.0,
                     Message::SettingsOcrConfidenceChanged
                 ),
             ],
@@ -272,12 +365,15 @@ fn settings_tab_view(tab: SettingsTab, settings: &AppSettings) -> Element<'_, Me
             column![
                 text_field(
                     "EE.log path",
+                    "Optional explicit Warframe EE.log path for automatic reward detection.",
                     &settings.warframe.log_path,
                     Message::SettingsWarframeLogPathChanged
                 ),
-                text_field(
+                pick_field(
                     "UI theme",
+                    "Warframe UI color theme used by reward-box extraction.",
                     &settings.warframe.ui_theme,
+                    WARFRAME_THEME_OPTIONS,
                     Message::SettingsWarframeUiThemeChanged
                 ),
             ],
@@ -285,13 +381,16 @@ fn settings_tab_view(tab: SettingsTab, settings: &AppSettings) -> Element<'_, Me
         SettingsTab::Logging => section(
             "Logging",
             column![
-                text_field(
+                pick_field(
                     "Log level",
+                    "Minimum application log level for terminal and file logging.",
                     &settings.logging.level,
+                    LOG_LEVEL_OPTIONS,
                     Message::SettingsLoggingLevelChanged
                 ),
                 text_field(
                     "Log file",
+                    "Optional explicit log file path; leave empty for the default app log path.",
                     &settings.logging.file,
                     Message::SettingsLoggingFileChanged
                 ),
@@ -312,16 +411,201 @@ fn section<'a>(
 
 fn text_field<'a>(
     label: &'static str,
+    help: &'static str,
     value: &str,
     on_input: fn(String) -> Message,
 ) -> Element<'a, Message> {
     column![
-        text(label).size(14),
+        label_with_info(label, help),
         text_input(label, value)
             .on_input(on_input)
             .padding([8, 10])
             .width(Length::Fill),
     ]
     .spacing(4)
+    .into()
+}
+
+fn pick_field<'a>(
+    label: &'static str,
+    help: &'static str,
+    value: &str,
+    options: &'static [&'static str],
+    on_selected: fn(String) -> Message,
+) -> Element<'a, Message> {
+    column![
+        label_with_info(label, help),
+        pick_list(options, selected_option(value, options), move |value| {
+            on_selected(value.to_owned())
+        })
+        .placeholder(label)
+        .width(Length::Fill),
+    ]
+    .spacing(4)
+    .into()
+}
+
+fn monitor_pick_field<'a>(
+    label: &'static str,
+    help: &'static str,
+    settings: &AppSettings,
+    monitors: &[MonitorChoice],
+) -> Element<'a, Message> {
+    let options = monitor_target_options(settings, monitors);
+    let selected =
+        (!settings.capture.monitor.trim().is_empty()).then(|| settings.capture.monitor.clone());
+
+    column![
+        label_with_info(label, help),
+        pick_list(options, selected, Message::SettingsCaptureMonitorChanged)
+            .placeholder("No detected monitor")
+            .width(Length::Fill),
+    ]
+    .spacing(4)
+    .into()
+}
+
+fn monitor_target_options(settings: &AppSettings, monitors: &[MonitorChoice]) -> Vec<String> {
+    let mut options = vec!["primary".to_owned()];
+
+    for output_name in monitors
+        .iter()
+        .filter_map(|monitor| monitor.output_name.as_ref())
+    {
+        if !options.iter().any(|option| option == output_name) {
+            options.push(output_name.clone());
+        }
+    }
+
+    let configured = settings.capture.monitor.trim();
+    if !configured.is_empty() && !options.iter().any(|option| option == configured) {
+        options.push(configured.to_owned());
+    }
+
+    options
+}
+
+fn selected_option(value: &str, options: &'static [&'static str]) -> Option<&'static str> {
+    options
+        .iter()
+        .copied()
+        .find(|option| option.eq_ignore_ascii_case(value))
+}
+
+fn u32_slider_field<'a>(
+    label: &'static str,
+    help: &'static str,
+    value: u32,
+    range: std::ops::RangeInclusive<u32>,
+    step: u32,
+    on_change: fn(u32) -> Message,
+) -> Element<'a, Message> {
+    column![
+        row![
+            label_with_info(label, help),
+            text(value.to_string()).size(14)
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+        slider(range, value, on_change).step(step),
+    ]
+    .spacing(4)
+    .into()
+}
+
+fn i32_slider_field<'a>(
+    label: &'static str,
+    help: &'static str,
+    value: i32,
+    range: std::ops::RangeInclusive<i32>,
+    step: i32,
+    on_change: fn(i32) -> Message,
+) -> Element<'a, Message> {
+    column![
+        row![
+            label_with_info(label, help),
+            text(value.to_string()).size(14)
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+        slider(range, value, on_change).step(step),
+    ]
+    .spacing(4)
+    .into()
+}
+
+fn f32_slider_field<'a>(
+    label: &'static str,
+    help: &'static str,
+    value: f32,
+    range: std::ops::RangeInclusive<f32>,
+    step: f32,
+    on_change: fn(f32) -> Message,
+) -> Element<'a, Message> {
+    column![
+        row![
+            label_with_info(label, help),
+            text(format!("{value:.1}")).size(14)
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+        slider(range, value, on_change).step(step),
+    ]
+    .spacing(4)
+    .into()
+}
+
+fn checkbox_field<'a>(
+    label: &'static str,
+    help: &'static str,
+    checked: bool,
+    on_toggle: fn(bool) -> Message,
+) -> Element<'a, Message> {
+    row![
+        checkbox(label, checked).on_toggle(on_toggle),
+        info_icon(help),
+    ]
+    .spacing(8)
+    .align_y(iced::Alignment::Center)
+    .into()
+}
+
+fn hotkey_field<'a>(
+    label: &'static str,
+    help: &'static str,
+    value: &'a str,
+    target: HotkeyCaptureTarget,
+    capturing_hotkey: Option<HotkeyCaptureTarget>,
+) -> Element<'a, Message> {
+    let button_label = if capturing_hotkey == Some(target) {
+        "Press key combination..."
+    } else {
+        value
+    };
+
+    column![
+        label_with_info(label, help),
+        button(button_label)
+            .padding([8, 10])
+            .width(Length::Fill)
+            .on_press(Message::StartHotkeyCapture(target)),
+    ]
+    .spacing(4)
+    .into()
+}
+
+fn label_with_info<'a>(label: &'static str, help: &'static str) -> Element<'a, Message> {
+    row![text(label).size(14), info_icon(help)]
+        .spacing(6)
+        .align_y(iced::Alignment::Center)
+        .into()
+}
+
+fn info_icon<'a>(help: &'static str) -> Element<'a, Message> {
+    tooltip(
+        text("[?]").size(14),
+        container(text(help).size(14)).padding(10),
+        tooltip::Position::Right,
+    )
     .into()
 }
