@@ -17,7 +17,8 @@ pub fn run(context: &AppContext) -> iced::Result {
         .run_with(move || {
             let mut application = Application::new(context);
             let startup_task = application.begin_startup_monitor_detection();
-            (application, startup_task)
+            let data_cache_task = application.begin_data_cache_refresh();
+            (application, Task::batch([startup_task, data_cache_task]))
         })
 }
 
@@ -82,6 +83,11 @@ impl Application {
             Message::QuitDebugOverlays => {
                 let count = self.quit_debug_overlay_processes();
                 self.report_closed_debug_overlays(count);
+                Task::none()
+            }
+            Message::RefreshDataCache => self.begin_data_cache_refresh(),
+            Message::DataCacheRefreshFinished(result) => {
+                self.record_data_cache_refresh_finished(result);
                 Task::none()
             }
             Message::ServiceEvent(event) => self.handle_service_event(event),

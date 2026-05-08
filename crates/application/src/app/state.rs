@@ -12,6 +12,7 @@ pub(super) struct Application {
     pub(super) overlay_processes: Vec<u32>,
     pub(super) status: String,
     pub(super) busy: bool,
+    pub(super) data_cache_refresh_in_progress: bool,
     pub(super) reward_scan_in_progress: bool,
 }
 
@@ -40,6 +41,7 @@ impl Application {
             overlay_processes: Vec::new(),
             status,
             busy: false,
+            data_cache_refresh_in_progress: false,
             reward_scan_in_progress: false,
         }
     }

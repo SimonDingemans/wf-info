@@ -69,6 +69,11 @@ impl CliArgs {
                         set_last_reward_ducats(&mut rewards, ducats);
                     }
                 }
+                "--reward-volume" => {
+                    if let Some(volume) = args.next().and_then(|value| value.parse().ok()) {
+                        set_last_reward_volume(&mut rewards, volume);
+                    }
+                }
                 "--reward-vaulted" => {
                     if let Some(vaulted) = args.next().and_then(|value| parse_bool_arg(&value)) {
                         set_last_reward_vaulted(&mut rewards, vaulted);
@@ -94,6 +99,12 @@ fn set_last_reward_platinum(rewards: &mut [RewardOverlayEntry], platinum: u32) {
 fn set_last_reward_ducats(rewards: &mut [RewardOverlayEntry], ducats: u32) {
     if let Some(reward) = rewards.last_mut() {
         reward.set_ducats(ducats);
+    }
+}
+
+fn set_last_reward_volume(rewards: &mut [RewardOverlayEntry], volume: u32) {
+    if let Some(reward) = rewards.last_mut() {
+        reward.set_volume(volume);
     }
 }
 
@@ -175,6 +186,8 @@ mod tests {
                 "8",
                 "--reward-ducats",
                 "15",
+                "--reward-volume",
+                "12",
                 "--reward-vaulted",
                 "false",
                 "--reward-name",
@@ -183,6 +196,8 @@ mod tests {
                 "42",
                 "--reward-ducats",
                 "45",
+                "--reward-volume",
+                "7",
                 "--reward-vaulted",
                 "yes",
             ]
@@ -200,10 +215,12 @@ mod tests {
                 assert_eq!(rewards[0].name, "Forma Blueprint");
                 assert_eq!(rewards[0].platinum, Some(8));
                 assert_eq!(rewards[0].ducats, Some(15));
+                assert_eq!(rewards[0].volume, Some(12));
                 assert!(!rewards[0].vaulted);
                 assert_eq!(rewards[1].name, "Braton Prime Receiver");
                 assert_eq!(rewards[1].platinum, Some(42));
                 assert_eq!(rewards[1].ducats, Some(45));
+                assert_eq!(rewards[1].volume, Some(7));
                 assert!(rewards[1].vaulted);
             }
             _ => panic!("expected reward overlay"),

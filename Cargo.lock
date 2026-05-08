@@ -178,6 +178,7 @@ dependencies = [
  "iced",
  "log",
  "ocr",
+ "reqwest",
  "shared",
 ]
 

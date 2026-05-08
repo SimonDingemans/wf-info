@@ -1,6 +1,8 @@
 use shared::{AppContext, monitor::MonitorInfo, rewards::RewardOverlayEntry};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::data_cache::DataCacheRefresh;
+
 use super::monitor::monitor_choices;
 use super::state::Application;
 
@@ -80,6 +82,29 @@ fn reward_scan_success_without_rewards_does_not_launch_overlay() {
     assert_eq!(
         application.status,
         "Reward scan completed, but no rewards were found."
+    );
+}
+
+#[test]
+fn data_cache_refresh_records_success_and_failure() {
+    let mut application = Application::new(test_context());
+    let _ = application.begin_data_cache_refresh();
+
+    application.record_data_cache_refresh_finished(Ok(DataCacheRefresh {
+        prices_path: "/tmp/wf-info/prices.json".into(),
+        filtered_items_path: "/tmp/wf-info/filtered_items.json".into(),
+    }));
+
+    assert!(!application.data_cache_refresh_in_progress);
+    assert!(application.status.contains("WFInfo data cache refreshed"));
+
+    let _ = application.begin_data_cache_refresh();
+    application.record_data_cache_refresh_finished(Err("offline".to_owned()));
+
+    assert!(!application.data_cache_refresh_in_progress);
+    assert_eq!(
+        application.status,
+        "WFInfo data cache refresh failed: offline"
     );
 }
 

@@ -16,6 +16,11 @@ impl Application {
         let quit_overlays_button = button("Quit Debug Overlays")
             .padding([10, 14])
             .on_press(Message::QuitDebugOverlays);
+        let refresh_data_button = button("Refresh Data Cache")
+            .padding([10, 14])
+            .on_press_maybe(
+                (!self.data_cache_refresh_in_progress).then_some(Message::RefreshDataCache),
+            );
 
         let selected = self.selected_monitor.clone();
         let monitor_picker = pick_list(
@@ -41,7 +46,13 @@ impl Application {
         let content = column![
             text("wf-info").size(32),
             text("Basic application shell").size(18),
-            row![detect_button, test_overlay_button, quit_overlays_button].spacing(12),
+            row![
+                detect_button,
+                test_overlay_button,
+                quit_overlays_button,
+                refresh_data_button
+            ]
+            .spacing(12),
             row![text("Selected capture/overlay target:"), monitor_picker]
                 .spacing(12)
                 .align_y(iced::Alignment::Center),

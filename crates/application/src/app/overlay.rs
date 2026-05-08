@@ -105,6 +105,7 @@ pub(super) fn spawn_reward_overlay(
         command.arg("--reward-name").arg(&reward.name);
         append_optional_reward_arg(&mut command, "--reward-platinum", reward.platinum);
         append_optional_reward_arg(&mut command, "--reward-ducats", reward.ducats);
+        append_optional_reward_arg(&mut command, "--reward-volume", reward.volume);
         command
             .arg("--reward-vaulted")
             .arg(reward.vaulted.to_string());

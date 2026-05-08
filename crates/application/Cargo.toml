@@ -7,4 +7,5 @@ edition.workspace = true
 iced.workspace = true
 log.workspace = true
 ocr.workspace = true
+reqwest.workspace = true
 shared.workspace = true

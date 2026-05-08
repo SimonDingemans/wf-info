@@ -261,6 +261,7 @@ fn reward_card(
         text(&reward.name).size(16).width(Length::Fill),
         reward_detail("Platinum", reward.platinum),
         reward_detail("Ducats", reward.ducats),
+        reward_detail("Volume", reward.volume),
         text(format!(
             "Vaulted: {}",
             if reward.vaulted { "Yes" } else { "No" }
