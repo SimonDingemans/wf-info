@@ -10,6 +10,7 @@ env_logger.workspace = true
 futures-util.workspace = true
 log.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 wayland-client.workspace = true

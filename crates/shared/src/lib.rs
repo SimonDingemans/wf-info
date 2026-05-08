@@ -1,6 +1,7 @@
 pub mod capture;
 pub mod config;
 pub mod context;
+pub mod item_database;
 pub mod logging;
 pub mod monitor;
 pub mod rewards;
