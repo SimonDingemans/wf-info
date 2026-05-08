@@ -90,6 +90,7 @@ impl Application {
         &mut self,
         result: Result<Vec<RewardOverlayEntry>, String>,
         overlay_result: Option<Result<u32, String>>,
+        clipboard_queued: bool,
     ) {
         self.reward_scan_in_progress = false;
 
@@ -101,20 +102,36 @@ impl Application {
                 Some(Ok(process_id)) => {
                     let reward_count = rewards.len();
                     self.overlay_processes.push(process_id);
-                    self.status =
-                        format!("Found {reward_count} reward(s) and sent them to the overlay.");
+                    self.status = reward_scan_success_status(
+                        format!("Found {reward_count} reward(s) and sent them to the overlay."),
+                        clipboard_queued,
+                    );
                 }
                 Some(Err(err)) => {
-                    self.status = format!("Found rewards, but could not launch overlay: {err}");
+                    self.status = reward_scan_success_status(
+                        format!("Found rewards, but could not launch overlay: {err}"),
+                        clipboard_queued,
+                    );
                 }
                 None => {
-                    self.status = format!("Found {} reward(s).", rewards.len());
+                    self.status = reward_scan_success_status(
+                        format!("Found {} reward(s).", rewards.len()),
+                        clipboard_queued,
+                    );
                 }
             },
             Err(err) => {
                 self.status = format!("Reward scan failed: {err}");
             }
         }
+    }
+}
+
+fn reward_scan_success_status(base: String, clipboard_queued: bool) -> String {
+    if clipboard_queued {
+        format!("{base} Clipboard summary queued.")
+    } else {
+        base
     }
 }
 

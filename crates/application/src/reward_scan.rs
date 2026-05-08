@@ -1,7 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use ocr::implementations::reward_screen::{
@@ -38,6 +38,7 @@ pub(crate) async fn scan_rewards_for_overlay(
     let capture_elapsed = started.elapsed();
     let debug_capture_path =
         write_debug_capture_if_enabled(&frame, &trigger, &settings, &debug_capture_dir);
+    prune_debug_captures_if_enabled(&settings, &debug_capture_dir);
     let theme = reward_ui_theme_from_settings(&settings)?;
     let options = ocr_options_from_settings(&settings);
     let ocr_started = Instant::now();
@@ -144,6 +145,69 @@ fn write_debug_capture(
 
 fn debug_capture_output_enabled(settings: &AppSettings) -> bool {
     settings.scanner.debug_images
+}
+
+fn prune_debug_captures_if_enabled(settings: &AppSettings, directory: &Path) {
+    if !debug_capture_output_enabled(settings) {
+        return;
+    }
+
+    if let Err(err) = prune_expired_debug_captures(
+        directory,
+        Duration::from_secs(
+            settings
+                .scanner
+                .debug_image_retention_hours
+                .saturating_mul(3600),
+        ),
+        SystemTime::now(),
+    ) {
+        log::warn!("failed to prune expired reward scan debug captures: {err}");
+    }
+}
+
+fn prune_expired_debug_captures(
+    directory: &Path,
+    retention: Duration,
+    now: SystemTime,
+) -> Result<usize, String> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(err) => return Err(err.to_string()),
+    };
+    let mut removed = 0;
+
+    for entry in entries {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let path = entry.path();
+
+        if !is_reward_debug_capture(&path) {
+            continue;
+        }
+
+        let modified = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .map_err(|err| err.to_string())?;
+
+        if now
+            .duration_since(modified)
+            .map(|age| age >= retention)
+            .unwrap_or(false)
+        {
+            fs::remove_file(&path).map_err(|err| err.to_string())?;
+            removed += 1;
+        }
+    }
+
+    Ok(removed)
+}
+
+fn is_reward_debug_capture(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("reward-capture-") && name.ends_with(".png"))
 }
 
 fn debug_capture_trigger_label(trigger: &RewardScanTrigger) -> &'static str {
@@ -285,7 +349,8 @@ fn reward_candidate_to_overlay_entry(
 mod tests {
     use super::{
         debug_capture_output_enabled, ensure_supported_capture_settings, ocr_options_from_settings,
-        reward_candidate_to_overlay_entry, reward_ui_theme_from_settings,
+        prune_expired_debug_captures, reward_candidate_to_overlay_entry,
+        reward_ui_theme_from_settings,
     };
     use ocr::implementations::reward_screen::RewardNameCandidate;
     use ocr::implementations::reward_screen::RewardUiTheme;
@@ -337,6 +402,49 @@ mod tests {
         settings.scanner.debug_images = false;
         settings.logging.level = " debug ".to_owned();
         assert!(!debug_capture_output_enabled(&settings));
+    }
+
+    #[test]
+    fn debug_capture_retention_only_removes_reward_capture_files() {
+        let directory =
+            std::env::temp_dir().join(format!("wf-info-debug-retention-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("debug directory");
+        let expired = directory.join("reward-capture-1-hotkey.png");
+        let latest = directory.join("latest-reward-capture.png");
+        std::fs::write(&expired, "old").expect("expired debug capture");
+        std::fs::write(&latest, "latest").expect("latest debug capture");
+
+        let removed = prune_expired_debug_captures(
+            &directory,
+            std::time::Duration::ZERO,
+            std::time::SystemTime::now(),
+        )
+        .expect("prune debug captures");
+
+        assert_eq!(removed, 1);
+        assert!(!expired.exists());
+        assert!(latest.exists());
+
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn debug_capture_retention_ignores_missing_directory() {
+        let directory = std::env::temp_dir().join(format!(
+            "wf-info-missing-debug-retention-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+
+        let removed = prune_expired_debug_captures(
+            &directory,
+            std::time::Duration::ZERO,
+            std::time::SystemTime::now(),
+        )
+        .expect("missing directory is not an error");
+
+        assert_eq!(removed, 0);
     }
 
     #[test]

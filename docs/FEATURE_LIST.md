@@ -2,18 +2,20 @@
 
 Source baseline: the existing `WFInfo` app behavior. This document is a compact feature inventory for the Rust rewrite targeting Linux desktops, with Wayland as the primary supported session.
 
+Checklist status: checked items have a concrete implementation in the current Rust workspace. Unchecked items may still be planned or partially implemented.
+
 ## MVP
 
 ### App Shell
 
-- Start a desktop application with shared app context, application UI, and overlay support.
-- Keep the application UI modular and open to extension by later features such as relic browsing, equipment browsing, market automation, Snap It, Search It, and Master It.
-- Persist user settings in the platform config/data directory.
+- [x] Start a desktop application with shared app context, application UI, and overlay support.
+- [x] Keep the application UI modular and open to extension by later features such as relic browsing, equipment browsing, market automation, Snap It, Search It, and Master It.
+- [x] Persist user settings in the platform config/data directory.
 - Show startup/loading status while OCR, market data, relic data, and equipment data initialize.
 - Provide a main control surface with:
   - current app version
-  - current data load state
-  - reload/force-update data action
+  - [x] current data load state
+  - [x] reload/force-update data action
   - settings entry point
   - relic browser entry point
   - equipment browser entry point
@@ -24,53 +26,53 @@ Source baseline: the existing `WFInfo` app behavior. This document is a compact 
 ### Data Loading and Caching
 
 - Download and cache Warframe/WFInfo data:
-  - filtered relic/equipment data from `https://api.warframestat.us/wfinfo/filtered_items`
-  - price sheet from `https://api.warframestat.us/wfinfo/prices`
+  - [x] filtered relic/equipment data from `https://api.warframestat.us/wfinfo/filtered_items`
+  - [x] price sheet from `https://api.warframestat.us/wfinfo/prices`
   - warframe.market item metadata from `https://api.warframe.market/v2/items`
 - Build local datasets for:
   - market item names and slugs
-  - prime part platinum values
-  - ducat values
-  - trade volume
+  - [x] prime part platinum values
+  - [x] ducat values
+  - [x] trade volume
   - relic rewards
   - equipment sets and part counts
   - game-name to market-name translations
 - Cache remote payloads and fall back to local cache when network fetches fail.
-- Support forced refresh without corrupting existing usable cache.
+- [x] Support forced refresh without corrupting existing usable cache.
 - Preserve user-owned counts and mastered flags across data refreshes.
 - Detect and expose vaulted relic/part state.
-- Include ignored or special reward items from the upstream data.
+- [x] Include ignored or special reward items from the upstream data.
 
 ### OCR Reward Processing
 
-- Capture the Warframe surface or screen area on activation.
-- Detect the void fissure reward area automatically.
+- [x] Capture the Warframe surface or screen area on activation.
+- [x] Detect the void fissure reward area automatically.
 - Extract one to four reward name regions.
-- Run OCR over reward names.
-- Match OCR output to known prime part names using fuzzy matching.
+- [x] Run OCR over reward names.
+- [x] Match OCR output to known prime part names using fuzzy matching.
 - Reject low-confidence or junk matches.
 - For each detected reward, calculate/display:
-  - corrected item name
-  - platinum price
+  - [x] corrected item name
+  - [x] platinum price
   - full-set price when available
-  - ducat value
-  - recent trade volume
-  - vaulted marker
+  - [x] ducat value
+  - [x] recent trade volume
+  - [x] vaulted marker
   - mastered marker
   - owned count versus required count
   - ducat-per-platinum efficiency
 - Highlight best reward choices:
-  - best platinum value
+  - [x] best platinum value
   - best ducat value
   - unowned/unmastered needed item
-- Prevent overlapping reward processing runs.
-- Save debug screenshots/crops when debug mode is enabled.
-- Retain debug images only for the configured retention period.
+- [x] Prevent overlapping reward processing runs.
+- [x] Save debug screenshots/crops when debug mode is enabled.
+- [x] Retain debug images only for the configured retention period.
 
 ### Overlay Display
 
-- Provide an overlay specifically designed for the end-of-mission reward screen.
-- Show one overlay entry per reward, positioned over or near reward cards.
+- [x] Provide an overlay specifically designed for the end-of-mission reward screen.
+- [x] Show one overlay entry per reward, positioned over or near reward cards.
 - Support transparent/click-through overlay surfaces where the compositor allows it.
 - Auto-hide overlays after a configurable delay.
 - Allow dismissing overlays with the activation key plus Delete-equivalent shortcut.
@@ -81,7 +83,7 @@ Source baseline: the existing `WFInfo` app behavior. This document is a compact 
 
 ### Hotkeys and Input
 
-- Configurable activation key or mouse button.
+- [x] Configurable activation key or mouse button.
 - Modifier hotkeys for:
   - debug screenshot loading
   - Snap It
@@ -96,26 +98,26 @@ Wayland note: global hotkeys, pointer tracking, screenshots, and click-through o
 ### Settings
 
 - Store user settings equivalent to the current app where useful for the Wayland/Linux product:
-  - display mode
-  - activation key
-  - overlay dismissal key
+  - [x] display mode
+  - [x] activation key
+  - [x] overlay dismissal key
   - modifier keys
-  - debug mode
-  - locale
-  - clipboard output
-  - auto OCR delay
-  - overlay delay
+  - [x] debug mode
+  - [x] locale
+  - [x] clipboard output
+  - [x] auto OCR delay
+  - [x] overlay delay
   - reward highlighting
-  - vaulted clipboard marker
+  - [x] vaulted clipboard marker
   - automatic reward detection/listing/counting toggles
-  - high contrast
-  - overlay X/Y offsets
-  - configured capture monitor/output
+  - [x] high contrast
+  - [x] overlay X/Y offsets
+  - [x] configured capture monitor/output
   - OCR double-check option
   - efficiency thresholds
   - Snap It tuning values
   - HDR handling preference
-  - configured Warframe UI theme
+  - [x] configured Warframe UI theme
   - ignored item list
 - Provide a settings window with tabs for each config section.
 - Validate settings on load and repair invalid hotkey names to defaults.
@@ -166,7 +168,7 @@ Wayland note: global hotkeys, pointer tracking, screenshots, and click-through o
 
 ### Clipboard Output
 
-- Optionally copy reward summaries to clipboard after OCR.
+- [x] Optionally copy reward summaries to clipboard after OCR.
 - Include item name, platinum value, optional set price, optional ducat/vaulted markers, and configurable footer/template.
 - Keep output suitable for Warframe chat formatting.
 
@@ -254,9 +256,9 @@ Wayland note: global hotkeys, pointer tracking, screenshots, and click-through o
 
 ### Automatic Reward Detection
 
-- Monitor Warframe log output and trigger reward OCR automatically after reward screen events.
-- Apply configurable automatic delay.
-- Support fixed delay fallback.
+- [x] Monitor Warframe log output and trigger reward OCR automatically after reward screen events.
+- [x] Apply configurable automatic delay.
+- [x] Support fixed delay fallback.
 - Avoid duplicate processing for the same reward screen.
 
 Wayland/Linux note: automatic detection should read Warframe logs directly, likely by tailing `EE.log` under the Proton/Steam prefix, native log path detection, or a user-configured log path.
@@ -264,37 +266,37 @@ Wayland/Linux note: automatic detection should read Warframe logs directly, like
 ### HDR and Theme Handling
 
 - Detect or configure HDR behavior.
-- Configure Warframe UI theme/color profile for reward-box extraction.
+- [x] Configure Warframe UI theme/color profile for reward-box extraction.
 - Support built-in theme profiles and custom color filter ranges.
 - Keep high-contrast mode independent from the configured Warframe theme.
 
 ### Debug/Test Utilities
 
-- Load reward screenshots from files for offline OCR tests.
+- [x] Load reward screenshots from files for offline OCR tests.
 - Load Snap It screenshots from files.
 - Load Master It screenshots from files.
-- Save intermediate OCR crops.
+- [x] Save intermediate OCR crops.
 - Spawn error dialogs with relevant log timestamp context.
-- Keep OCR test runner style fixtures for regression testing.
+- [x] Keep OCR test runner style fixtures for regression testing.
 
 ## Wayland/Linux Product Requirements
 
 - Surface and process discovery:
   - find the Warframe process and visible surface under native Linux and Proton
-  - handle multiple monitors
-  - handle per-monitor scaling and DPI
-  - use the configured monitor/output instead of trying to auto-detect where Warframe is displayed
-  - support only borderless fullscreen Warframe at 16:9
-  - show a clear unsupported-configuration status for other display modes or aspect ratios
+  - [x] handle multiple monitors
+  - [x] handle per-monitor scaling and DPI
+  - [x] use the configured monitor/output instead of trying to auto-detect where Warframe is displayed
+  - [x] support only borderless fullscreen Warframe at 16:9
+  - [x] show a clear unsupported-configuration status for other display modes or aspect ratios
 - Screenshot capture:
-  - support Wayland capture through portals or compositor integrations
-  - provide useful failure messages when compositor permissions block capture
+  - [x] support Wayland capture through portals or compositor integrations
+  - [x] provide useful failure messages when compositor permissions block capture
   - account for HDR/color-space differences
 - Overlay:
-  - Wayland-native overlay behavior where available
+  - [x] Wayland-native overlay behavior where available
   - graceful fallback to a separate result surface when click-through overlay is unavailable
 - Hotkeys:
-  - global shortcut support through desktop portals or compositor-specific integrations
+  - [x] global shortcut support through desktop portals or compositor-specific integrations
   - documented limitations when a compositor does not expose the required capability
 - Storage:
   - use XDG config/data/cache locations
@@ -307,17 +309,17 @@ Wayland/Linux note: automatic detection should read Warframe logs directly, like
 
 ### Phase 1: Usable Core
 
-- Basic extensible application UI
-- Settings persistence
+- [x] Basic extensible application UI
+- [x] Settings persistence
 - Data download/cache/fallback
 - Warframe log discovery/tailing
-- Automatic end-of-mission reward detection from logs
-- Screenshot capture
-- OCR reward processing for end-of-mission rewards
-- Reward-screen-specific overlay
-- Manual activation/debug trigger as a fallback
-- Clipboard summary
-- Debug image loading
+- [x] Automatic end-of-mission reward detection from logs
+- [x] Screenshot capture
+- [x] OCR reward processing for end-of-mission rewards
+- [x] Reward-screen-specific overlay
+- [x] Manual activation/debug trigger as a fallback
+- [x] Clipboard summary
+- [x] Debug image loading
 
 ### Phase 2: Quality and Parity
 

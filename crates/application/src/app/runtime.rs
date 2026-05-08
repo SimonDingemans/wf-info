@@ -1,4 +1,4 @@
-use iced::{Subscription, Task, Theme};
+use iced::{Subscription, Task, Theme, clipboard};
 use shared::AppContext;
 
 use crate::subscriptions;
@@ -90,6 +90,10 @@ impl Application {
                 self.record_data_cache_refresh_finished(result);
                 Task::none()
             }
+            Message::ClipboardOutputChanged(enabled) => {
+                self.set_clipboard_output_enabled(enabled);
+                Task::none()
+            }
             Message::ServiceEvent(event) => self.handle_service_event(event),
             Message::RewardScanFinished(result) => {
                 let overlay_result = result
@@ -97,9 +101,16 @@ impl Application {
                     .ok()
                     .filter(|rewards| !rewards.is_empty())
                     .map(|rewards| spawn_reward_overlay(self.selected_monitor.as_ref(), rewards));
+                let clipboard_summary = result.as_ref().ok().and_then(|rewards| {
+                    shared::clipboard::reward_summary(&self.settings.clipboard, rewards)
+                });
+                let clipboard_queued = clipboard_summary.is_some();
+                let clipboard_task = clipboard_summary
+                    .map(clipboard::write)
+                    .unwrap_or_else(Task::none);
 
-                self.record_reward_scan_finished(result, overlay_result);
-                Task::none()
+                self.record_reward_scan_finished(result, overlay_result, clipboard_queued);
+                clipboard_task
             }
         }
     }

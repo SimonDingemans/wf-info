@@ -16,6 +16,8 @@ pub struct Config {
     #[serde(default)]
     pub overlay: OverlayConfig,
     #[serde(default)]
+    pub clipboard: ClipboardConfig,
+    #[serde(default)]
     pub ocr: OcrConfig,
     #[serde(default)]
     pub warframe: WarframeConfig,
@@ -289,6 +291,26 @@ impl Default for OverlayConfig {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct ClipboardConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub include_vaulted_marker: bool,
+    #[serde(default)]
+    pub footer: String,
+}
+
+impl Default for ClipboardConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            include_vaulted_marker: true,
+            footer: String::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OcrConfig {
     #[serde(default = "default_ocr_language")]
@@ -446,6 +468,8 @@ monitor = "DP-1"
         assert_eq!(settings.hotkeys.activation, "F12");
         assert_eq!(settings.hotkeys.dismiss_overlay, "F11");
         assert_eq!(settings.overlay.duration_ms, 10_000);
+        assert!(!settings.clipboard.enabled);
+        assert!(settings.clipboard.include_vaulted_marker);
         assert_eq!(settings.ocr.language, "eng");
         assert_eq!(settings.warframe.ui_theme, "lotus");
         assert_eq!(settings.logging.level, "info");
@@ -464,6 +488,7 @@ monitor = "DP-1"
         assert!(contents.contains("[scanner]"));
         assert!(contents.contains("[hotkeys]"));
         assert!(contents.contains("[overlay]"));
+        assert!(contents.contains("[clipboard]"));
         assert!(contents.contains("[ocr]"));
         assert!(contents.contains("[warframe]"));
         assert!(contents.contains("[logging]"));

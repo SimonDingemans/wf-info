@@ -17,6 +17,7 @@ pub(super) enum Message {
     QuitDebugOverlays,
     RefreshDataCache,
     DataCacheRefreshFinished(Result<DataCacheRefresh, String>),
+    ClipboardOutputChanged(bool),
     ServiceEvent(ServiceEvent),
     RewardScanFinished(Result<Vec<RewardOverlayEntry>, String>),
 }

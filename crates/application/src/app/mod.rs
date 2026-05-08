@@ -5,6 +5,7 @@ mod overlay;
 mod reward;
 mod runtime;
 mod services;
+mod settings;
 mod state;
 #[cfg(test)]
 mod tests;

@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, pick_list, row, scrollable, text};
+use iced::widget::{button, checkbox, column, container, pick_list, row, scrollable, text};
 use iced::{Element, Length};
 
 use super::message::Message;
@@ -29,6 +29,11 @@ impl Application {
             Message::SelectedMonitorChanged,
         )
         .placeholder("Active screen");
+        let clipboard_toggle = checkbox(
+            "Copy reward summaries after scans",
+            self.settings.clipboard.enabled,
+        )
+        .on_toggle(Message::ClipboardOutputChanged);
 
         let monitor_rows = self
             .monitors
@@ -56,6 +61,7 @@ impl Application {
             row![text("Selected capture/overlay target:"), monitor_picker]
                 .spacing(12)
                 .align_y(iced::Alignment::Center),
+            clipboard_toggle,
             text(&self.status),
             scrollable(monitor_rows).height(Length::Fill),
         ]

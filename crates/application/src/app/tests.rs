@@ -63,7 +63,7 @@ fn reward_scan_success_launches_overlay_when_rewards_are_found() {
         RewardOverlayEntry::name_only("Braton Prime Receiver"),
     ];
 
-    application.record_reward_scan_finished(Ok(rewards), Some(Ok(123)));
+    application.record_reward_scan_finished(Ok(rewards), Some(Ok(123)), false);
 
     assert_eq!(application.overlay_processes, vec![123]);
     assert_eq!(
@@ -73,16 +73,57 @@ fn reward_scan_success_launches_overlay_when_rewards_are_found() {
 }
 
 #[test]
+fn reward_scan_success_reports_queued_clipboard_summary() {
+    let mut application = Application::new(test_context());
+    let rewards = vec![RewardOverlayEntry::name_only("Forma Blueprint").with_platinum(12)];
+
+    application.record_reward_scan_finished(Ok(rewards), None, true);
+
+    assert_eq!(
+        application.status,
+        "Found 1 reward(s). Clipboard summary queued."
+    );
+}
+
+#[test]
+fn enabled_clipboard_settings_format_reward_scan_summary() {
+    let mut application = Application::new(test_context());
+    application.settings.clipboard.enabled = true;
+    application.settings.clipboard.footer = "via wf-info".to_owned();
+    let rewards = vec![RewardOverlayEntry::name_only("Forma Blueprint").with_platinum(12)];
+
+    let summary = shared::clipboard::reward_summary(&application.settings.clipboard, &rewards);
+
+    assert_eq!(
+        summary,
+        Some("Forma Blueprint: 12p\nvia wf-info".to_owned())
+    );
+}
+
+#[test]
 fn reward_scan_success_without_rewards_does_not_launch_overlay() {
     let mut application = Application::new(test_context());
 
-    application.record_reward_scan_finished(Ok(Vec::new()), None);
+    application.record_reward_scan_finished(Ok(Vec::new()), None, false);
 
     assert!(application.overlay_processes.is_empty());
     assert_eq!(
         application.status,
         "Reward scan completed, but no rewards were found."
     );
+}
+
+#[test]
+fn clipboard_output_setting_is_persisted() {
+    let mut application = Application::new(test_context());
+
+    application.set_clipboard_output_enabled(true);
+
+    assert!(application.settings.clipboard.enabled);
+    assert_eq!(application.status, "Clipboard summaries enabled.");
+
+    let saved = application.context.load_settings().expect("saved settings");
+    assert!(saved.clipboard.enabled);
 }
 
 #[test]
