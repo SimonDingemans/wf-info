@@ -12,7 +12,7 @@ use ocr::{
     Rect,
 };
 use shared::config::{CaptureMethod, Settings as AppSettings};
-use shared::monitor::MonitorInfo;
+use shared::monitor::{MonitorCaptureRegion, MonitorRegion};
 use shared::rewards::RewardOverlayEntry;
 use shared::watchers::log_watcher::RewardScreenDetection;
 
@@ -155,7 +155,7 @@ fn capture_request_from_settings(settings: &AppSettings) -> Result<CaptureReques
 
 fn configured_monitor_region(settings: &AppSettings) -> Result<Option<(Rect, Rect)>, String> {
     let target = settings.capture.monitor.trim();
-    if target.is_empty() || target.eq_ignore_ascii_case("primary") {
+    if shared::monitor::target_uses_full_screenshot(target) {
         log::debug!(
             "capture monitor is {:?}; using full portal screenshot without monitor crop",
             settings.capture.monitor
@@ -164,111 +164,31 @@ fn configured_monitor_region(settings: &AppSettings) -> Result<Option<(Rect, Rec
     }
 
     let monitors = shared::monitor::detect_monitor_info()?;
-    let Some(monitor) = find_configured_monitor(&monitors, target) else {
-        let available = monitors
-            .iter()
-            .map(MonitorInfo::display_name)
-            .collect::<Vec<_>>()
-            .join(", ");
-        return Err(format!(
-            "configured capture monitor {:?} was not found; available monitors: {}",
-            settings.capture.monitor,
-            if available.is_empty() {
-                "none".to_owned()
-            } else {
-                available
-            }
-        ));
+    let Some(region) = shared::monitor::capture_region_for_target(&monitors, target)? else {
+        return Ok(None);
     };
 
-    let region = monitor_region(monitor)?;
-    let desktop_bounds = desktop_bounds(&monitors)?;
     log::debug!(
         "configured capture monitor {:?} resolved to logical crop {:?} within logical desktop {:?}",
         settings.capture.monitor,
-        region,
-        desktop_bounds
+        region.region,
+        region.desktop_bounds
     );
 
-    Ok(Some((region, desktop_bounds)))
+    Ok(Some(ocr_capture_region(region)))
 }
 
-fn find_configured_monitor<'a>(
-    monitors: &'a [MonitorInfo],
-    target: &str,
-) -> Option<&'a MonitorInfo> {
-    monitors
-        .iter()
-        .find(|monitor| monitor_matches(monitor, target))
+fn ocr_capture_region(region: MonitorCaptureRegion) -> (Rect, Rect) {
+    (ocr_rect(region.region), ocr_rect(region.desktop_bounds))
 }
 
-fn monitor_matches(monitor: &MonitorInfo, target: &str) -> bool {
-    let normalized_target = normalize_monitor_target(target);
-    [
-        monitor.xdg_output_name.as_deref(),
-        monitor.id.as_deref(),
-        monitor.mapping_id.as_deref(),
-    ]
-    .into_iter()
-    .flatten()
-    .any(|value| normalize_monitor_target(value) == normalized_target)
-}
-
-fn normalize_monitor_target(target: &str) -> String {
-    target.trim().to_ascii_lowercase()
-}
-
-fn monitor_region(monitor: &MonitorInfo) -> Result<Rect, String> {
-    let (x, y) = monitor.position.ok_or_else(|| {
-        format!(
-            "capture monitor {} does not have a known position",
-            monitor.display_name()
-        )
-    })?;
-    let (width, height) = monitor.size.ok_or_else(|| {
-        format!(
-            "capture monitor {} does not have a known size",
-            monitor.display_name()
-        )
-    })?;
-
-    if x < 0 || y < 0 || width <= 0 || height <= 0 {
-        return Err(format!(
-            "capture monitor {} has unsupported geometry: position={:?}, size={:?}",
-            monitor.display_name(),
-            monitor.position,
-            monitor.size
-        ));
+fn ocr_rect(region: MonitorRegion) -> Rect {
+    Rect {
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
     }
-
-    Ok(Rect {
-        x: x as u32,
-        y: y as u32,
-        width: width as u32,
-        height: height as u32,
-    })
-}
-
-fn desktop_bounds(monitors: &[MonitorInfo]) -> Result<Rect, String> {
-    let mut regions = monitors
-        .iter()
-        .map(monitor_region)
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    let Some(first) = regions.next() else {
-        return Err("no monitor geometry was available for capture scaling".to_owned());
-    };
-
-    let bounds = regions.fold(first, |bounds, region| Rect {
-        x: bounds.x.min(region.x),
-        y: bounds.y.min(region.y),
-        width: bounds.right().max(region.right()) - bounds.x.min(region.x),
-        height: bounds.bottom().max(region.bottom()) - bounds.y.min(region.y),
-    });
-
-    log::debug!("logical desktop bounds for capture scaling: {bounds:?}");
-
-    Ok(bounds)
 }
 
 fn reward_ui_theme_from_settings(settings: &AppSettings) -> Result<RewardUiTheme, String> {
@@ -308,15 +228,13 @@ fn reward_candidate_to_overlay_entry(
 #[cfg(test)]
 mod tests {
     use super::{
-        debug_capture_output_enabled, desktop_bounds, ensure_supported_capture_settings,
-        ocr_options_from_settings, reward_candidate_to_overlay_entry,
-        reward_ui_theme_from_settings,
+        debug_capture_output_enabled, ensure_supported_capture_settings, ocr_options_from_settings,
+        reward_candidate_to_overlay_entry, reward_ui_theme_from_settings,
     };
     use ocr::implementations::reward_screen::RewardNameCandidate;
     use ocr::implementations::reward_screen::RewardUiTheme;
     use ocr::{Rect, ScanRegion};
     use shared::config::Settings;
-    use shared::monitor::MonitorInfo;
 
     #[test]
     fn ocr_options_use_configured_settings_and_ignore_empty_tessdata_path() {
@@ -372,82 +290,6 @@ mod tests {
         let theme = reward_ui_theme_from_settings(&settings).expect("known theme");
 
         assert_eq!(theme, RewardUiTheme::Vitruvian);
-    }
-
-    #[test]
-    fn configured_monitor_geometry_becomes_capture_region() {
-        let monitor = MonitorInfo {
-            pipe_wire_node_id: None,
-            id: Some("DP-3".to_owned()),
-            mapping_id: None,
-            position: Some((2649, 0)),
-            size: Some((2648, 1490)),
-            source_type: Some("Wayland xdg-output".to_owned()),
-            xdg_output_name: Some("DP-3".to_owned()),
-        };
-
-        let region = super::monitor_region(&monitor).expect("monitor region");
-
-        assert_eq!(
-            region,
-            Rect {
-                x: 2649,
-                y: 0,
-                width: 2648,
-                height: 1490
-            }
-        );
-    }
-
-    #[test]
-    fn configured_monitor_matches_wayland_output_name_case_insensitively() {
-        let monitor = MonitorInfo {
-            pipe_wire_node_id: None,
-            id: Some("other".to_owned()),
-            mapping_id: None,
-            position: Some((0, 0)),
-            size: Some((1920, 1080)),
-            source_type: None,
-            xdg_output_name: Some("DP-1".to_owned()),
-        };
-
-        assert!(super::monitor_matches(&monitor, "dp-1"));
-    }
-
-    #[test]
-    fn desktop_bounds_cover_all_monitor_logical_regions() {
-        let monitors = vec![
-            MonitorInfo {
-                pipe_wire_node_id: None,
-                id: Some("DP-3".to_owned()),
-                mapping_id: None,
-                position: Some((0, 0)),
-                size: Some((2648, 1490)),
-                source_type: Some("Wayland xdg-output".to_owned()),
-                xdg_output_name: Some("DP-3".to_owned()),
-            },
-            MonitorInfo {
-                pipe_wire_node_id: None,
-                id: Some("DP-1".to_owned()),
-                mapping_id: None,
-                position: Some((2649, 0)),
-                size: Some((2648, 1490)),
-                source_type: Some("Wayland xdg-output".to_owned()),
-                xdg_output_name: Some("DP-1".to_owned()),
-            },
-        ];
-
-        let bounds = desktop_bounds(&monitors).expect("desktop bounds");
-
-        assert_eq!(
-            bounds,
-            Rect {
-                x: 0,
-                y: 0,
-                width: 5297,
-                height: 1490
-            }
-        );
     }
 
     #[test]

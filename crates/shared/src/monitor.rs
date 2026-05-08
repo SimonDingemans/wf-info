@@ -61,6 +61,73 @@ impl MonitorInfo {
 
         lines
     }
+
+    pub fn matches_target(&self, target: &str) -> bool {
+        let normalized_target = normalize_monitor_target(target);
+        [
+            self.xdg_output_name.as_deref(),
+            self.id.as_deref(),
+            self.mapping_id.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .any(|value| normalize_monitor_target(value) == normalized_target)
+    }
+
+    pub fn logical_region(&self) -> Result<MonitorRegion, String> {
+        let (x, y) = self.position.ok_or_else(|| {
+            format!(
+                "capture monitor {} does not have a known position",
+                self.display_name()
+            )
+        })?;
+        let (width, height) = self.size.ok_or_else(|| {
+            format!(
+                "capture monitor {} does not have a known size",
+                self.display_name()
+            )
+        })?;
+
+        if x < 0 || y < 0 || width <= 0 || height <= 0 {
+            return Err(format!(
+                "capture monitor {} has unsupported geometry: position={:?}, size={:?}",
+                self.display_name(),
+                self.position,
+                self.size
+            ));
+        }
+
+        Ok(MonitorRegion {
+            x: x as u32,
+            y: y as u32,
+            width: width as u32,
+            height: height as u32,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MonitorRegion {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl MonitorRegion {
+    pub fn right(&self) -> u32 {
+        self.x.saturating_add(self.width)
+    }
+
+    pub fn bottom(&self) -> u32 {
+        self.y.saturating_add(self.height)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MonitorCaptureRegion {
+    pub region: MonitorRegion,
+    pub desktop_bounds: MonitorRegion,
 }
 
 pub fn detect_monitor_info() -> Result<Vec<MonitorInfo>, String> {
@@ -78,9 +145,70 @@ pub fn detect_monitor_info() -> Result<Vec<MonitorInfo>, String> {
         .collect())
 }
 
+pub fn capture_region_for_target(
+    monitors: &[MonitorInfo],
+    target: &str,
+) -> Result<Option<MonitorCaptureRegion>, String> {
+    let target = target.trim();
+    if target_uses_full_screenshot(target) {
+        return Ok(None);
+    }
+
+    let Some(monitor) = monitors
+        .iter()
+        .find(|monitor| monitor.matches_target(target))
+    else {
+        let available = monitors
+            .iter()
+            .map(MonitorInfo::display_name)
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(format!(
+            "configured capture monitor {target:?} was not found; available monitors: {}",
+            if available.is_empty() {
+                "none".to_owned()
+            } else {
+                available
+            }
+        ));
+    };
+
+    Ok(Some(MonitorCaptureRegion {
+        region: monitor.logical_region()?,
+        desktop_bounds: logical_desktop_bounds(monitors)?,
+    }))
+}
+
+pub fn logical_desktop_bounds(monitors: &[MonitorInfo]) -> Result<MonitorRegion, String> {
+    let mut regions = monitors
+        .iter()
+        .map(MonitorInfo::logical_region)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    let Some(first) = regions.next() else {
+        return Err("no monitor geometry was available for capture scaling".to_owned());
+    };
+
+    Ok(regions.fold(first, |bounds, region| MonitorRegion {
+        x: bounds.x.min(region.x),
+        y: bounds.y.min(region.y),
+        width: bounds.right().max(region.right()) - bounds.x.min(region.x),
+        height: bounds.bottom().max(region.bottom()) - bounds.y.min(region.y),
+    }))
+}
+
+pub fn target_uses_full_screenshot(target: &str) -> bool {
+    let target = target.trim();
+    target.is_empty() || target.eq_ignore_ascii_case("primary")
+}
+
 fn format_pair(pair: Option<(i32, i32)>) -> String {
     pair.map(|(x, y)| format!("{x}, {y}"))
         .unwrap_or_else(|| "unknown".to_owned())
+}
+
+fn normalize_monitor_target(target: &str) -> String {
+    target.trim().to_ascii_lowercase()
 }
 
 #[derive(Clone, Debug)]
@@ -262,7 +390,7 @@ delegate_noop!(WaylandOutputState: ignore ZxdgOutputManagerV1);
 
 #[cfg(test)]
 mod tests {
-    use super::WaylandOutputDetails;
+    use super::{MonitorInfo, MonitorRegion, WaylandOutputDetails, logical_desktop_bounds};
     use wayland_protocols::xdg::xdg_output::zv1::client::zxdg_output_v1;
 
     #[test]
@@ -296,5 +424,71 @@ mod tests {
         });
 
         assert!(details.into_detected_output().is_none());
+    }
+
+    #[test]
+    fn monitor_geometry_becomes_logical_region() {
+        let monitor = monitor_info("DP-3", (2649, 0), (2648, 1490));
+
+        let region = monitor.logical_region().expect("monitor region");
+
+        assert_eq!(
+            region,
+            MonitorRegion {
+                x: 2649,
+                y: 0,
+                width: 2648,
+                height: 1490
+            }
+        );
+    }
+
+    #[test]
+    fn monitor_matches_wayland_output_name_case_insensitively() {
+        let monitor = monitor_info("DP-1", (0, 0), (1920, 1080));
+
+        assert!(monitor.matches_target("dp-1"));
+    }
+
+    #[test]
+    fn desktop_bounds_cover_all_monitor_logical_regions() {
+        let monitors = vec![
+            monitor_info("DP-3", (0, 0), (2648, 1490)),
+            monitor_info("DP-1", (2649, 0), (2648, 1490)),
+        ];
+
+        let bounds = logical_desktop_bounds(&monitors).expect("desktop bounds");
+
+        assert_eq!(
+            bounds,
+            MonitorRegion {
+                x: 0,
+                y: 0,
+                width: 5297,
+                height: 1490
+            }
+        );
+    }
+
+    #[test]
+    fn capture_region_for_primary_target_uses_full_screenshot() {
+        let monitors = vec![monitor_info("DP-1", (0, 0), (1920, 1080))];
+
+        let region =
+            super::capture_region_for_target(&monitors, " primary ").expect("primary target");
+
+        assert_eq!(region, None);
+    }
+
+    fn monitor_info(name: &str, position: (i32, i32), size: (i32, i32)) -> MonitorInfo {
+        MonitorInfo {
+            pipe_wire_node_id: None,
+            id: Some(name.to_owned()),
+            mapping_id: None,
+            position: Some(position),
+            size: Some(size),
+            source_type: Some("Wayland xdg-output".to_owned()),
+            xdg_output_name: Some(name.to_owned()),
+        }
     }
 }
